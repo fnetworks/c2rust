@@ -1,8 +1,9 @@
 #![feature(rustc_private)]
-extern crate rustc;
 extern crate rustc_target;
-extern crate syntax;
-extern crate syntax_pos;
+extern crate rustc_ast;
+extern crate rustc_span;
+extern crate rustc_hir;
+extern crate rustc_data_structures;
 
 mod builder;
 pub use builder::{mk, Builder, Make};
