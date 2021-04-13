@@ -1,13 +1,14 @@
 use std::collections::{HashMap, HashSet};
-use rustc::hir::def_id::DefId;
-use rustc::ty::TyKind;
-use syntax::ast;
-use syntax::ast::*;
-use syntax::attr;
-use syntax::mut_visit::{self, MutVisitor};
-use syntax::ptr::P;
-use syntax_pos::sym;
-use smallvec::{smallvec, SmallVec};
+use rustc_hir::def_id::DefId;
+use rustc_middle::ty::TyKind;
+use rustc_ast::ast;
+use rustc_ast::ast::*;
+use rustc_ast::attr;
+use rustc_ast::mut_visit::{self, MutVisitor};
+use rustc_ast::ptr::P;
+use rustc_span::sym;
+use rustc_span::symbol::Ident;
+use smallvec::SmallVec;
 
 use c2rust_ast_builder::{mk, IntoSymbol};
 use crate::ast_manip::{FlatMapNodes, MutVisitNodes, fold_modules, visit_nodes, MutVisit};
@@ -46,15 +47,15 @@ impl Transform for ToMethod {
         FlatMapNodes::visit(krate, |i: P<Item>| {
             // We're looking for an inherent impl (no `TraitRef`) marked with a cursor.
             if !st.marked(i.id, "dest") ||
-               !matches!([i.kind] ItemKind::Impl(_, _, _, _, None, _, _)) {
-                return smallvec![i];
+               !cmatches!([i.kind] ItemKind::Impl(_, _, _, _, None, _, _)) {
+                return SmallVec::new([i]);
             }
 
             if dest.is_none() {
                 dest = Some(i.clone());
             }
 
-            smallvec![i]
+            SmallVec::new([i])
         });
 
         if dest.is_none() {
@@ -193,23 +194,23 @@ impl Transform for ToMethod {
 
         FlatMapNodes::visit(krate, |i: P<Item>| {
             if i.id != dest.id || fns.is_none() {
-                return smallvec![i];
+                return SmallVec::new([i]);
             }
 
-            smallvec![i.map(|i| {
+            SmallVec::from([i.map(|i| {
                 unpack!([i.kind] ItemKind::Impl(
                         unsafety, polarity, generics, defaultness, trait_ref, ty, items));
                 let mut items = items;
                 let fns = fns.take().unwrap();
                 items.extend(fns.into_iter().map(|f| {
-                    ImplItem {
+                    Item::<ImplKind> {
                         id: DUMMY_NODE_ID,
                         ident: f.item.ident,
                         vis: f.item.vis.clone(),
                         defaultness: Defaultness::Final,
                         attrs: f.item.attrs.clone(),
                         generics: f.generics,
-                        kind: ImplItemKind::Method(f.sig, f.block),
+                        kind: ImplKind::Method(f.sig, f.block),
                         span: f.item.span,
                         tokens: None,
                     }
@@ -219,14 +220,14 @@ impl Transform for ToMethod {
                               unsafety, polarity, generics, defaultness, trait_ref, ty, items),
                     .. i
                 }
-            })]
+            })])
         });
 
 
         // (5) Find all uses of marked functions, and rewrite them into method calls.
 
         MutVisitNodes::visit(krate, |e: &mut P<Expr>| {
-            if !matches!([e.kind] ExprKind::Call(..)) {
+            if !cmatches!([e.kind] ExprKind::Call(..)) {
                 return;
             }
 
@@ -328,23 +329,23 @@ impl<'a> MutVisitor for SinkUnsafeFolder<'a> {
         mut_visit::noop_flat_map_item(i, self)
     }
 
-    fn flat_map_impl_item(&mut self, mut i: ImplItem) -> SmallVec<[ImplItem; 1]> {
+    fn flat_map_impl_item(&mut self, mut i: AssocItem) -> SmallVec<[AssocItem; 1]> {
         if self.st.marked(i.id, "target") {
             match i.kind {
-                ImplItemKind::Method(FnSig { ref mut header, .. }, ref mut block) => {
+                AssocItemKind::Method(FnSig { ref mut header, .. }, ref mut block) => {
                     sink_unsafe(&mut header.unsafety, block);
                 },
                 _ => {},
             }
         }
 
-        mut_visit::noop_flat_map_impl_item(i, self)
+        mut_visit::noop_flat_map_assoc_item(i, self)
     }
 }
 
-fn sink_unsafe(unsafety: &mut Unsafety, block: &mut P<Block>) {
-    if *unsafety == Unsafety::Unsafe {
-        *unsafety = Unsafety::Normal;
+fn sink_unsafe(unsafety: &mut Unsafe, block: &mut P<Block>) {
+    if let Unsafe::Yes(_) = *unsafety {
+        *unsafety = Unsafe::No;
         *block = mk().block(vec![
             mk().expr_stmt(mk().block_expr(mk().unsafe_().block(
                         block.stmts.clone())))]);
@@ -449,16 +450,16 @@ impl Transform for WrapExtern {
         let mut dest_path = None;
         FlatMapNodes::visit(krate, |i: P<Item>| {
             if !st.marked(i.id, "dest") {
-                return smallvec![i];
+                return SmallVec::new([i]);
             }
 
             if dest_path.is_some() {
                 info!("warning: found multiple \"dest\" marks");
-                return smallvec![i];
+                return SmallVec::new([i]);
             }
             dest_path = Some(cx.def_path(cx.node_def_id(i.id)));
 
-            smallvec![i.map(|i| {
+            SmallVec::new([i.map(|i| {
                 unpack!([i.kind] ItemKind::Mod(m));
                 let mut m = m;
 
@@ -467,7 +468,7 @@ impl Transform for WrapExtern {
                     let arg_names = f.decl.inputs.iter().enumerate().map(|(idx, arg)| {
                         // TODO: match_arg("__i: __t", arg).ident("__i")
                         match arg.pat.kind {
-                            PatKind::Ident(BindingMode::ByValue(Mutability::Immutable),
+                            PatKind::Ident(BindingMode::ByValue(Mutability::Not),
                                            ident,
                                            None) => {
                                 ident
@@ -504,7 +505,7 @@ impl Transform for WrapExtern {
                     kind: ItemKind::Mod(m),
                     .. i
                 }
-            })]
+            })])
         });
 
         if dest_path.is_none() {
@@ -560,11 +561,11 @@ impl Transform for WrapApi {
         // Add wrapper functions
         FlatMapNodes::visit(krate, |i: P<Item>| {
             if !st.marked(i.id, "target") {
-                return smallvec![i];
+                return SmallVec::new([i]);
             }
 
-            if !matches!([i.kind] ItemKind::Fn(..)) {
-                return smallvec![i];
+            if !cmatches!([i.kind] ItemKind::Fn(..)) {
+                return SmallVec::new([i]);
             }
 
             let (decl, old_ext) = expect!([i.kind]
@@ -572,13 +573,13 @@ impl Transform for WrapApi {
 
             // Get the exported symbol name of the function
             let symbol =
-                if let Some(sym) = attr::first_attr_value_str_by_name(&i.attrs, sym::export_name) {
+                if let Some(sym) = cx.sess.first_attr_value_str_by_name(&i.attrs, sym::export_name) {
                     sym
-                } else if attr::contains_name(&i.attrs, sym::no_mangle) {
+                } else if cx.sess.contains_name(&i.attrs, sym::no_mangle) {
                     i.ident.name
                 } else {
                     warn!("marked function `{:?}` does not have a stable symbol", i.ident.name);
-                    return smallvec![i];
+                    return SmallVec::new([i]);
                 };
 
             // Remove export-related attrs from the original function, and set it to Abi::Rust.
@@ -658,7 +659,7 @@ impl Transform for WrapApi {
             let item_hir_id = cx.hir_map().node_to_hir_id(i.id);
             wrapper_map.insert(item_hir_id, wrapper_name);
 
-            let mut v = smallvec![];
+            let mut v = SmallVec::new();
             v.push(i);
             v.push(wrapper);
             v

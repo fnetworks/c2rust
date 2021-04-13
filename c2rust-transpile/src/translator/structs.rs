@@ -11,13 +11,13 @@ use crate::translator::{ExprContext, Translation, PADDING_SUFFIX};
 use crate::with_stmts::WithStmts;
 use c2rust_ast_builder::mk;
 use c2rust_ast_printer::pprust;
-use syntax::ast::{
+use rustc_ast::ast::{
     self, AttrStyle, BinOpKind, Expr, ExprKind, Lit, LitIntType, LitKind, MetaItemKind,
-    NestedMetaItem, StmtKind, StrStyle, StructField, Ty, TyKind,
+    NestedMetaItem, StmtKind, StrStyle, FieldDef, Ty, TyKind,
 };
-use syntax::ptr::P;
-use syntax::source_map::symbol::Symbol;
-use syntax_pos::DUMMY_SP;
+use rustc_ast::ptr::P;
+use rustc_span::symbol::Symbol;
+use rustc_span::DUMMY_SP;
 
 use itertools::EitherOrBoth::{Both, Right};
 use itertools::Itertools;
@@ -39,7 +39,7 @@ enum FieldType {
     Regular {
         name: String,
         ctype: CTypeId,
-        field: StructField,
+        field: FieldDef,
         use_inner_type: bool,
     },
 }
@@ -47,11 +47,11 @@ enum FieldType {
 fn contains_block(expr_kind: &ExprKind) -> bool {
     match expr_kind {
         ExprKind::Block(..) => true,
-        ExprKind::Assign(lhs, rhs) => contains_block(&lhs.kind) || contains_block(&rhs.kind),
+        ExprKind::Assign(lhs, rhs, _) => contains_block(&lhs.kind) || contains_block(&rhs.kind),
         ExprKind::AssignOp(_, lhs, rhs) => contains_block(&lhs.kind) || contains_block(&rhs.kind),
         ExprKind::Binary(_, lhs, rhs) => contains_block(&lhs.kind) || contains_block(&rhs.kind),
         ExprKind::Unary(_, e) => contains_block(&e.kind),
-        ExprKind::MethodCall(_, exprs) => exprs.iter().map(|e| contains_block(&e.kind)).any(|b| b),
+        ExprKind::MethodCall(_, exprs, _) => exprs.iter().map(|e| contains_block(&e.kind)).any(|b| b),
         ExprKind::Cast(e, _) => contains_block(&e.kind),
         _ => false,
     }
@@ -277,7 +277,7 @@ impl<'a> Translation<'a> {
         struct_id: CRecordId,
         field_ids: &[CDeclId],
         platform_byte_size: u64,
-    ) -> Result<Vec<StructField>, TranslationError> {
+    ) -> Result<Vec<FieldDef>, TranslationError> {
         let mut field_entries = Vec::with_capacity(field_ids.len());
         // We need to clobber bitfields in consecutive bytes together (leaving
         // regular fields alone) and add in padding as necessary
@@ -533,7 +533,7 @@ impl<'a> Translation<'a> {
 
         fields
             .into_iter()
-            .collect::<WithStmts<Vec<ast::Field>>>()
+            .collect::<WithStmts<Vec<ast::ExprField>>>()
             .and_then(|fields| {
                 let struct_expr = mk().struct_expr(name.as_str(), fields);
                 let local_variable =
@@ -648,7 +648,7 @@ impl<'a> Translation<'a> {
 
         Ok(fields
             .into_iter()
-            .collect::<WithStmts<Vec<ast::Field>>>()
+            .collect::<WithStmts<Vec<ast::ExprField>>>()
             .map(|fields| mk().struct_expr(name.as_str(), fields)))
     }
 

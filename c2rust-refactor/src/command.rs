@@ -1,9 +1,9 @@
 //! Command management and overall refactoring state.
 
-use rustc::hir;
-use rustc::hir::def_id::LOCAL_CRATE;
-use rustc::session::{self, DiagnosticOutput, Session};
-use rustc::ty::TyCtxt;
+use rustc_hir as hir;
+use rustc_hir::def_id::LOCAL_CRATE;
+use rustc_session::{self, DiagnosticOutput, Session};
+use rustc_middle::ty::TyCtxt;
 use rustc_data_structures::sync::Lrc;
 use rustc_interface::interface;
 use rustc_interface::util;
@@ -16,12 +16,12 @@ use std::ops::Deref;
 use std::process;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use syntax::ast::{Crate, NodeId, CRATE_NODE_ID};
-use syntax::ast::{Expr, Item, Pat, Stmt, Ty};
-use syntax::ptr::P;
-use syntax::source_map::SourceMap;
-use syntax::symbol::Symbol;
-use syntax::visit::Visitor;
+use rustc_ast::ast::{Crate, NodeId, CRATE_NODE_ID};
+use rustc_ast::ast::{Expr, Item, Pat, Stmt, Ty};
+use rustc_ast::ptr::P;
+use rustc_span::source_map::SourceMap;
+use rustc_span::symbol::Symbol;
+use rustc_ast::visit::Visitor;
 
 use crate::ast_manip::map_ast_into;
 use crate::ast_manip::number_nodes::{
@@ -210,7 +210,7 @@ impl RefactorState {
             compiler,
             cmd_reg,
             file_io,
-            marks: marks,
+            marks,
 
             commands: vec![],
 
@@ -391,7 +391,7 @@ impl RefactorState {
                     let hir = queries.lower_to_hir()?.take();
                     let (ref hir_forest, ref resolver) = hir;
                     let resolver = resolver.steal();
-                    let map = hir::map::map_crate(
+                    let map = rust_middle::hir::map::map_crate(
                         session,
                         &*resolver.cstore,
                         &hir_forest,
@@ -437,7 +437,7 @@ impl RefactorState {
             node_map.init(cs.new_parsed_node_ids.get_mut().drain(..));
 
             if let Some(collapse_info) = collapse_info {
-                collapse_info.collapse(node_map, &cs);
+                collapse_info.collapse(node_map, &cs, session);
             }
 
             for (node, comment) in cs.new_comments.get_mut().drain(..) {
@@ -472,7 +472,7 @@ impl RefactorState {
         let old_session = &compiler.sess;
 
         let descriptions = rustc_driver::diagnostics_registry();
-        let mut new_sess = session::build_session_with_source_map(
+        let mut new_sess = rustc_session::build_session_with_source_map(
             old_session.opts.clone(),
             old_session.local_crate_source_file.clone(),
             descriptions,

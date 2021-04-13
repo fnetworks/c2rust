@@ -33,7 +33,7 @@
 //! - ForeignItem
 //! - Item
 //! - Variant
-//! - Field
+//! - ExprField
 //! - TraitItem
 //! - ImplItem
 //! - Stmt
@@ -52,9 +52,9 @@ use crate::rust_ast::{pos_to_span, traverse};
 use itertools::Itertools;
 use smallvec::{smallvec, SmallVec};
 use std::collections::BTreeMap;
-use syntax::ast::*;
-use syntax::util::comments;
-use syntax_pos::{BytePos, Span};
+use rustc_ast::ast::*;
+use rustc_ast::util::comments;
+use rustc_span::{BytePos, Span};
 
 pub struct CommentStore {
     /// The `BytePos` keys do _not_ correspond to the comment position. Instead, they refer to the
@@ -168,7 +168,7 @@ impl CommentStore {
         } else {
             let new_comment = comments::Comment {
                 style,
-                lines: lines,
+                lines,
                 pos: BytePos(0), // overwritten in `add_comment`
             };
             Some(self.insert_comments(smallvec![new_comment], pos))
@@ -256,11 +256,10 @@ macro_rules! reinsert_and_traverse {
 impl traverse::Traversal for CommentTraverser {
     reinsert_and_traverse!(traverse_stmt, Stmt, traverse::traverse_stmt_def);
     reinsert_and_traverse!(traverse_expr, Expr, traverse::traverse_expr_def);
-    reinsert_and_traverse!(traverse_trait_item, TraitItem, traverse::traverse_trait_item_def);
-    reinsert_and_traverse!(traverse_impl_item, ImplItem, traverse::traverse_impl_item_def);
+    reinsert_and_traverse!(traverse_assoc_item, AssocItem, traverse::traverse_assoc_item_def);
     reinsert_and_traverse!(traverse_block, Block, traverse::traverse_block_def);
     reinsert_and_traverse!(traverse_local, Local, traverse::traverse_local_def);
-    reinsert_and_traverse!(traverse_field, Field, traverse::traverse_field_def);
+    reinsert_and_traverse!(traverse_field, ExprField, traverse::traverse_field_def);
     reinsert_and_traverse!(traverse_item, Item, traverse::traverse_item_def);
 
     fn traverse_foreign_item(&mut self, mut i: ForeignItem) -> ForeignItem {

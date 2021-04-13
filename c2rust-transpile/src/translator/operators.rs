@@ -32,7 +32,7 @@ impl From<c_ast::BinOp> for BinOpKind {
             c_ast::BinOp::And => BinOpKind::And,
             c_ast::BinOp::Or => BinOpKind::Or,
 
-            _ => panic!("C BinOp {:?} is not a valid Rust BinOpKind"),
+            _ => panic!("C BinOp {:?} is not a valid Rust BinOpKind", op),
         }
     }
 }
@@ -941,9 +941,9 @@ impl<'c> Translation<'c> {
                         ))?;
 
                     let mutbl = if pointee_ty.qualifiers.is_const {
-                        Mutability::Immutable
+                        Mutability::Not
                     } else {
-                        Mutability::Mutable
+                        Mutability::Mut
                     };
 
                     arg.result_map(|a| {
@@ -954,7 +954,7 @@ impl<'c> Translation<'c> {
                             // so we work around that by using & and an extra cast
                             // through & to *const to *mut
                             addr_of_arg = mk().addr_of_expr(a);
-                            if mutbl == Mutability::Mutable {
+                            if mutbl == Mutability::Mut {
                                 let mut qtype = pointee_ty;
                                 qtype.qualifiers.is_const = true;
                                 let ty_ = self

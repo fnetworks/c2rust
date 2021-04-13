@@ -21,7 +21,7 @@ extern crate rustc_resolve;
 extern crate rustc_trans;
 extern crate syntax;
 extern crate syntax_ext;
-extern crate syntax_pos;
+extern crate rustc_span;
 
 #[macro_use] extern crate c2rust_refactor;
 pub use c2rust_refactor::*;

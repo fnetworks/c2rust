@@ -1,14 +1,15 @@
-use arena::SyncDroplessArena;
+use rustc_arena::DroplessArena;
 use ena::unify as ut;
-use rustc::{hir, ty};
-use rustc::hir::def::Res;
+use rustc_hir as hir;
+use rustc_middle::ty;
+use rustc_hir::def::Res;
 use rustc_data_structures::sync::Lrc;
-use syntax::ast::*;
-use syntax::token;
-use syntax::ptr::P;
-use syntax::symbol::Symbol;
-use syntax::visit::{self, Visitor};
-use syntax_pos::Span;
+use rustc_ast::ast::*;
+use rustc_ast::token;
+use rustc_ast::ptr::P;
+use rustc_span::symbol::Symbol;
+use rustc_ast::visit::{self, Visitor};
+use rustc_span::Span;
 
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
@@ -148,7 +149,7 @@ fn remove_suffix(lit: &Lit) -> Option<Lit> {
 
 impl Transform for RemoveLiteralSuffixes {
     fn transform(&self, krate: &mut Crate, _st: &CommandState, cx: &RefactorCtxt) {
-        let arena = SyncDroplessArena::default();
+        let arena = DroplessArena::default();
         let mut uv = UnifyVisitor {
             cx,
             arena: &arena,
@@ -217,7 +218,7 @@ impl Transform for RemoveLiteralSuffixes {
 
 struct UnifyVisitor<'a, 'kt, 'tcx: 'a + 'kt> {
     cx: &'a RefactorCtxt<'a, 'tcx>,
-    arena: &'kt SyncDroplessArena,
+    arena: &'kt DroplessArena,
     unif: ut::UnificationTable<ut::InPlace<LitTyKey<'tcx>>>,
     lit_nodes: HashMap<NodeId, LitTyKey<'tcx>>,
 }

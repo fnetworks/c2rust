@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use rustc::ty;
+use rustc_middle::ty;
 
 use rlua::prelude::{LuaMetaMethod, LuaUserData, LuaUserDataMethods};
 
@@ -36,7 +36,7 @@ pub struct LuaTy {
     ty_ptr: *const (),
 }
 
-/// `Ty<'tcx>` points into a `SyncDroplessArena` which is not thread-local,
+/// `Ty<'tcx>` points into a `DroplessArena` which is not thread-local,
 /// so pointers into it are safe to send across threads
 unsafe impl Send for LuaTy {}
 

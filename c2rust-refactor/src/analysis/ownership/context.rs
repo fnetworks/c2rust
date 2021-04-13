@@ -22,12 +22,12 @@
 
 use std::collections::hash_map::{self, Entry, HashMap};
 
-use arena::SyncDroplessArena;
+use rustc_arena::DroplessArena;
 use log::Level;
-use rustc::hir::def_id::DefId;
-use rustc::ty::{Ty, TyCtxt, TyKind};
+use rustc_hir::def_id::DefId;
+use rustc_middle::ty::{Ty, TyCtxt, TyKind};
 use rustc_index::vec::IndexVec;
-use syntax::source_map::Span;
+use rustc_span::source_map::Span;
 
 use crate::analysis::labeled_ty::LabeledTyCtxt;
 
@@ -108,7 +108,7 @@ pub struct Instantiation {
 pub struct Ctxt<'lty, 'tcx> {
     pub tcx: TyCtxt<'tcx>,
     pub lcx: LabeledTyCtxt<'lty, Option<PermVar>>,
-    pub arena: &'lty SyncDroplessArena,
+    pub arena: &'lty DroplessArena,
 
     /// Types of non-`fn` definitions.  This includes `static`s and also `struct` fields.
     pub static_summ: HashMap<DefId, LTy<'lty, 'tcx>>,
@@ -125,7 +125,7 @@ pub struct Ctxt<'lty, 'tcx> {
 impl<'lty, 'a: 'lty, 'tcx: 'a> Ctxt<'lty, 'tcx> {
     pub fn new(
         tcx: TyCtxt<'tcx>,
-        arena: &'lty SyncDroplessArena,
+        arena: &'lty DroplessArena,
     ) -> Ctxt<'lty, 'tcx> {
         Ctxt {
             tcx,

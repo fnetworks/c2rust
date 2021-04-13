@@ -1,12 +1,13 @@
 //! Intraprocedural step of the analysis.
 
 use log::Level;
-use rustc::hir::def_id::DefId;
-use rustc::mir::*;
-use rustc::ty::{Ty, TyKind};
+use rustc_hir::def_id::DefId;
+use rustc_middle::mir::*;
+use rustc_middle::hir::place::PlaceBase;
+use rustc_middle::ty::{Ty, TyKind};
 use rustc_index::vec::IndexVec;
 use rustc_target::abi::VariantIdx;
-use syntax::source_map::{DUMMY_SP, Spanned};
+use rustc_span::source_map::{DUMMY_SP, Spanned};
 
 use crate::analysis::labeled_ty::{LabeledTy, LabeledTyCtxt};
 
@@ -318,16 +319,7 @@ impl<'c, 'lty, 'a: 'lty, 'tcx: 'a> IntraCtxt<'c, 'lty, 'a, 'tcx> {
         } else {
             match lv.base {
                 PlaceBase::Local(l) => (self.local_var_ty(l), Perm::move_(), None),
-
-                PlaceBase::Static(ref s) => match s.kind {
-                    StaticKind::Static => (self.static_ty(s.def_id), Perm::move_(), None),
-                    StaticKind::Promoted(ref _p, _) => {
-                        // TODO: test this
-                        let pty = lv.ty(self.mir, self.cx.tcx);
-                        let ty = pty.ty;
-                        (self.local_ty(ty), Perm::read(), None)
-                    }
-                },
+                PlaceBase::Static(ref s) => (self.static_ty(s.def_id), Perm::move_(), None),
             }
         }
     }

@@ -3,6 +3,7 @@ extern crate env_logger;
 extern crate log;
 #[macro_use]
 extern crate clap;
+#[cfg(feature = "refactor")]
 extern crate c2rust_refactor;
 extern crate shlex;
 
@@ -12,8 +13,10 @@ use std::io::Read;
 use std::process;
 use std::str::FromStr;
 
+#[cfg(feature = "refactor")]
 use c2rust_refactor::{file_io, CargoTarget, Command, Cursor, Mark, Options, RustcArgSource};
 
+#[cfg(feature = "refactor")]
 fn main() {
     let yaml = load_yaml!("../refactor.yaml");
     let args = App::from_yaml(yaml).get_matches();
@@ -30,6 +33,7 @@ fn main() {
     process::exit(ret);
 }
 
+#[cfg(feature = "refactor")]
 fn parse_opts(args: &ArgMatches) -> Option<Options> {
     // Parse rewrite mode
     let rewrite_modes = match args.values_of("rewrite-mode") {
@@ -200,4 +204,9 @@ fn parse_opts(args: &ArgMatches) -> Option<Options> {
         plugins,
         plugin_dirs,
     })
+}
+
+#[cfg(not(feature = "refactor"))]
+fn main() {
+    unimplemented!("c2rust-refactor is disabled");
 }

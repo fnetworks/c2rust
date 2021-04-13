@@ -3,11 +3,12 @@
 
 use std::fmt::Debug;
 
-use rustc::hir;
-use rustc::hir::def_id::DefId;
-use rustc::ty;
-use syntax::ast::*;
-use syntax::visit::{self, Visitor};
+use rustc_hir as hir;
+use rustc_hir::def_id::DefId;
+use rustc_middle::ty;
+use rustc_middle::hir::map;
+use rustc_ast::ast::*;
+use rustc_ast::visit::{self, Visitor};
 
 use crate::context::HirMap;
 
@@ -50,7 +51,7 @@ pub trait Type: Copy + Debug {
 }
 
 pub struct TypeMapVisitor<'a, 'tcx: 'a, S, F> {
-    hir_map: &'a hir::map::Map<'tcx>,
+    hir_map: &'a map::Map<'tcx>,
     source: S,
     callback: F,
 }
@@ -65,7 +66,7 @@ where
     /// (The structures may not match if the `ast::Ty` refers to a type alias which has been
     /// expanded, for example - then `ast_ty` looks like `Alias` while `ty` is `Foo<Bar, Baz>`.)
     fn record_ty(&mut self, ty: S::Type, ast_ty: &Ty) {
-        use rustc::ty::TyKind::*;
+        use rustc_middle::ty::TyKind::*;
 
         (self.callback)(&mut self.source, ast_ty, ty);
 
@@ -115,10 +116,10 @@ where
         }
     }
 
-    fn record_function_ret_ty(&mut self, ty: S::Type, output: &FunctionRetTy) {
+    fn record_function_ret_ty(&mut self, ty: S::Type, output: &FnRetTy) {
         match *output {
-            FunctionRetTy::Default(_) => {}
-            FunctionRetTy::Ty(ref ast_ty) => self.record_ty(ty, ast_ty),
+            FnRetTy::Default(_) => {}
+            FnRetTy::Ty(ref ast_ty) => self.record_ty(ty, ast_ty),
         }
     }
 
@@ -238,7 +239,7 @@ where
                 }
             }
 
-            // Enum/Struct/Union are handled by `visit_struct_field`.
+            // Enum/Struct/Union are handled by `visit_field_def`.
             ItemKind::Impl(_, _, _, _, _, ref ast_ty, _) => {
                 if let Some(ty) = self.source.def_type(def_id) {
                     self.record_ty(ty, ast_ty);
@@ -251,31 +252,31 @@ where
         visit::walk_item(self, i);
     }
 
-    fn visit_struct_field(&mut self, f: &'ast StructField) {
+    fn visit_field_def(&mut self, f: &'ast FieldDef) {
         let def_id = self.hir_map.local_def_id_from_node_id(f.id);
         if let Some(ty) = self.source.def_type(def_id) {
             self.record_ty(ty, &f.ty);
         }
 
-        visit::walk_struct_field(self, f);
+        visit::walk_field_def(self, f);
     }
 
-    fn visit_impl_item(&mut self, i: &'ast ImplItem) {
+    fn visit_assoc_item(&mut self, i: &'ast AssocItem) {
         let def_id = self.hir_map.local_def_id_from_node_id(i.id);
         match i.kind {
-            ImplItemKind::Const(ref ast_ty, _) => {
+            AssocItemKind::Const(ref ast_ty, _) => {
                 if let Some(ty) = self.source.def_type(def_id) {
                     self.record_ty(ty, ast_ty);
                 }
             }
 
-            ImplItemKind::Method(ref method_sig, _) => {
+            AssocItemKind::Fn(ref method_sig, _) => {
                 if let Some(sig) = self.source.fn_sig(def_id) {
                     self.record_fn_decl(sig, &method_sig.decl);
                 }
             }
 
-            ImplItemKind::TyAlias(ref ast_ty) => {
+            AssocItemKind::TyAlias(ref ast_ty) => {
                 if let Some(ty) = self.source.def_type(def_id) {
                     self.record_ty(ty, ast_ty);
                 }
@@ -284,36 +285,7 @@ where
             _ => {}
         }
 
-        visit::walk_impl_item(self, i);
-    }
-
-    fn visit_trait_item(&mut self, i: &'ast TraitItem) {
-        let def_id = self.hir_map.local_def_id_from_node_id(i.id);
-        match i.kind {
-            TraitItemKind::Const(ref ast_ty, _) => {
-                if let Some(ty) = self.source.def_type(def_id) {
-                    self.record_ty(ty, ast_ty);
-                }
-            }
-
-            TraitItemKind::Method(ref method_sig, _) => {
-                if let Some(sig) = self.source.fn_sig(def_id) {
-                    self.record_fn_decl(sig, &method_sig.decl);
-                }
-            }
-
-            TraitItemKind::Type(_, ref opt_ast_ty) => {
-                if let Some(ref ast_ty) = *opt_ast_ty {
-                    if let Some(ty) = self.source.def_type(def_id) {
-                        self.record_ty(ty, ast_ty);
-                    }
-                }
-            }
-
-            _ => {}
-        }
-
-        visit::walk_trait_item(self, i);
+        visit::walk_assoc_item(self, i);
     }
 
     fn visit_foreign_item(&mut self, i: &'ast ForeignItem) {

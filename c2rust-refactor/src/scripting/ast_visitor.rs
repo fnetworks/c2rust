@@ -1,11 +1,12 @@
 use smallvec::SmallVec;
-use syntax::ast::*;
-use syntax::mut_visit::{self, *};
-use syntax::ptr::P;
+use rustc_ast::ast::*;
+use rustc_ast::mut_visit::{self, *};
+use rustc_ast::ptr::P;
+use rustc_span::symbol::Ident;
 
 use rlua::prelude::{LuaContext, LuaFunction, LuaResult, LuaTable, LuaUserData, LuaValue};
 
-use crate::ast_manip::{WalkAst};
+use crate::ast_manip::WalkAst;
 use super::DisplayLuaError;
 use super::to_lua_ast_node::{FromLuaAstNode, FromLuaExt, LuaAstNode, ToLuaScoped};
 
@@ -403,7 +404,6 @@ macro_rules! impl_visitors {
 
 impl<'lua> MutVisitor for LuaAstVisitorNew<'lua> {
     impl_visitors!{
-        [visit: visit_mod, Mod, noop_visit_mod],
         [visit: visit_expr, P<Expr>, noop_visit_expr],
         [visit: visit_fn_header, FnHeader, noop_visit_fn_header],
         [visit: visit_fn_decl, P<FnDecl>, noop_visit_fn_decl],
@@ -415,10 +415,10 @@ impl<'lua> MutVisitor for LuaAstVisitorNew<'lua> {
         [flat_map: flat_map_item, P<Item>, noop_flat_map_item],
         [flat_map: flat_map_foreign_item, ForeignItem, noop_flat_map_foreign_item],
         [flat_map: flat_map_stmt, Stmt, noop_flat_map_stmt],
-        [flat_map: flat_map_struct_field, StructField, noop_flat_map_struct_field]
+        [flat_map: flat_map_field_def, FieldDef, noop_flat_map_field_def]
     }
 
-    fn visit_mac(&mut self, mac: &mut Mac) {
+    fn visit_mac_call(&mut self, mac: &mut MacCall) {
         mut_visit::noop_visit_mac(mac, self);
     }
 }

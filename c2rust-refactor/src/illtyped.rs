@@ -1,10 +1,10 @@
-use rustc::hir;
-use rustc::hir::def::Res;
-use rustc::ty::{self, ParamEnv, TyCtxt};
+use rustc_hir as hir;
+use rustc_hir::def::Res;
+use rustc_middle::ty::{self, ParamEnv, TyCtxt};
 use smallvec::SmallVec;
-use syntax::ast::*;
-use syntax::mut_visit::{self, MutVisitor};
-use syntax::ptr::P;
+use rustc_ast::ast::*;
+use rustc_ast::mut_visit::{self, MutVisitor};
+use rustc_ast::ptr::P;
 
 use crate::ast_manip::MutVisit;
 use crate::RefactorCtxt;
@@ -117,7 +117,7 @@ impl<'a, 'tcx, F: IlltypedFolder<'tcx>> MutVisitor for FoldIlltyped<'a, 'tcx, F>
             Some(x) => x,
             None => return,
         };
-        if let ty::TyKind::Error = ty.kind {
+        if let ty::TyKind::Error(..) = ty.kind {
             return;
         }
 
@@ -167,7 +167,7 @@ impl<'a, 'tcx, F: IlltypedFolder<'tcx>> MutVisitor for FoldIlltyped<'a, 'tcx, F>
                 }
             }
             ExprKind::Binary(binop, lhs, rhs) => {
-                use syntax::ast::BinOpKind::*;
+                use rustc_ast::ast::BinOpKind::*;
                 // TODO: check for overloads
                 match binop.node {
                     Add | Sub | Mul | Div | Rem | BitXor | BitAnd | BitOr => {
@@ -192,7 +192,7 @@ impl<'a, 'tcx, F: IlltypedFolder<'tcx>> MutVisitor for FoldIlltyped<'a, 'tcx, F>
             }
             ExprKind::Unary(unop, ohs) => {
                 // TODO: need case for deref, and a check for overloads
-                use syntax::ast::UnOp::*;
+                use rustc_ast::ast::UnOp::*;
                 match unop {
                     Not | Neg => {
                         illtyped |= self.ensure(ohs, ty);
@@ -317,7 +317,7 @@ fn handle_struct<'tcx, F>(
     cx: &RefactorCtxt<'_, 'tcx>,
     expr_id: NodeId,
     ty: ty::Ty<'tcx>,
-    fields: &mut Vec<Field>,
+    fields: &mut Vec<FieldDef>,
     maybe_expr: &mut Option<P<Expr>>,
     mut ensure: F,
 ) where

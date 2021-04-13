@@ -5,13 +5,13 @@ use std::cmp;
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use arena::SyncDroplessArena;
+use rustc_arena::DroplessArena;
 use log::Level;
-use rustc::hir::def_id::DefId;
+use rustc_hir::def_id::DefId;
 use rustc_index::vec::IndexVec;
-use syntax::ast;
-use syntax::symbol::Symbol;
-use syntax::visit::{self, Visitor};
+use rustc_ast::ast;
+use rustc_span::symbol::Symbol;
+use rustc_ast::visit::{self, Visitor};
 
 use crate::ast_manip::Visit;
 use crate::command::CommandState;
@@ -135,9 +135,9 @@ impl<'ast> Visitor<'ast> for AttrVisitor<'ast> {
         visit::walk_item(self, i);
     }
 
-    fn visit_impl_item(&mut self, i: &'ast ast::ImplItem) {
+    fn visit_assoc_item(&mut self, i: &'ast ast::AssocItem) {
         match i.kind {
-            ast::ImplItemKind::Method(..) | ast::ImplItemKind::Const(..) => {
+            ast::AssocItemKind::Fn(..) | ast::AssocItemKind::Const(..) => {
                 if !i.attrs.is_empty() {
                     self.def_attrs.push((i.id, &i.attrs));
                 }
@@ -145,7 +145,7 @@ impl<'ast> Visitor<'ast> for AttrVisitor<'ast> {
             _ => {}
         }
 
-        visit::walk_impl_item(self, i);
+        visit::walk_assoc_item(self, i);
     }
 
     fn visit_foreign_item(&mut self, i: &'ast ast::ForeignItem) {
@@ -162,12 +162,12 @@ impl<'ast> Visitor<'ast> for AttrVisitor<'ast> {
         visit::walk_foreign_item(self, i);
     }
 
-    fn visit_struct_field(&mut self, sf: &'ast ast::StructField) {
+    fn visit_field_def(&mut self, sf: &'ast ast::FieldDef) {
         if !sf.attrs.is_empty() {
             self.def_attrs.push((sf.id, &sf.attrs));
         }
 
-        visit::walk_struct_field(self, sf);
+        visit::walk_field_def(self, sf);
     }
 }
 
@@ -320,7 +320,7 @@ fn nested_str(nmeta: &ast::NestedMetaItem) -> Result<Symbol, &'static str> {
 
 fn parse_ownership_constraints<'lty>(
     meta: &ast::MetaItem,
-    arena: &'lty SyncDroplessArena,
+    arena: &'lty DroplessArena,
 ) -> Result<ConstraintSet<'lty>, &'static str> {
     let args = meta_item_list(meta)?;
 
@@ -346,7 +346,7 @@ fn parse_ownership_constraints<'lty>(
 
 fn parse_perm<'lty>(
     meta: &ast::MetaItem,
-    arena: &'lty SyncDroplessArena,
+    arena: &'lty DroplessArena,
 ) -> Result<Perm<'lty>, &'static str> {
     if meta.check_name(Symbol::intern("min")) {
         let args = meta_item_list(meta)?;

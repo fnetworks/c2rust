@@ -1,7 +1,7 @@
 //! `Visit` trait for AST types that can be visited.
-use syntax;
-use syntax::ast::*;
-use syntax::visit::Visitor;
+use rustc_ast;
+use rustc_ast::ast::*;
+use rustc_ast::visit::Visitor;
 
 /// A trait for AST nodes that can accept a `Visitor`.
 pub trait Visit {
@@ -11,12 +11,12 @@ pub trait Visit {
 // There's no `visit_crate` method in `Visitor`, for some reason.
 impl Visit for Crate {
     fn visit<'ast, V: Visitor<'ast>>(&'ast self, v: &mut V) {
-        syntax::visit::walk_crate(v, self);
+        rustc_ast::visit::walk_crate(v, self);
     }
 }
 
-// This macro takes as input the definition of `syntax::visit::Visitor` as it appears the libsyntax
-// docs, and emits a `Visit` impl for each method it finds.
+// This macro takes as input the definition of `rustc_ast::visit::Visitor` as it appears the
+// rustc_ast docs, and emits a `Visit` impl for each method it finds.
 macro_rules! gen_visit_impls {
     (
         pub trait Visitor<'ast>: Sized {
@@ -36,7 +36,7 @@ macro_rules! gen_visit_impls {
 }
 
 gen_visit_impls! {
-    // Copy-pasted from the syntax::visit::Visitor docs.  Some methods take multiple arguments, so
+    // Copy-pasted from the rustc_ast::visit::Visitor docs.  Some methods take multiple arguments, so
     // they are commented out in this copy.
     pub trait Visitor<'ast>: Sized {
         //fn visit_name(&mut self, _span: Span, _name: Name) { ... }
@@ -82,7 +82,7 @@ gen_visit_impls! {
         //    _: NodeId,
         //    _: Span
         //) { ... }
-        fn visit_struct_field(&mut self, s: &'ast StructField) { ... }
+        fn visit_field_def(&mut self, s: &'ast FieldDef) { ... }
         //fn visit_enum_def(
         //    &mut self,
         //    enum_definition: &'ast EnumDef,
@@ -98,7 +98,7 @@ gen_visit_impls! {
         //) { ... }
         fn visit_label(&mut self, label: &'ast Label) { ... }
         fn visit_lifetime(&mut self, lifetime: &'ast Lifetime) { ... }
-        fn visit_mac(&mut self, mac: &'ast Mac) { ... }
+        fn visit_mac_call(&mut self, mac: &'ast Mac) { ... }
         //fn visit_mac_def(&mut self, _mac: &'ast MacroDef, _id: NodeId) { ... }
         //fn visit_path(&mut self, path: &'ast Path, _id: NodeId) { ... }
         //fn visit_use_tree(&mut self, use_tree: &'ast UseTree, id: NodeId, _nested: bool) { ... }
@@ -118,6 +118,6 @@ gen_visit_impls! {
         //fn visit_tts(&mut self, tts: TokenStream) { ... }
         //fn visit_token(&mut self, _t: Token) { ... }
         fn visit_vis(&mut self, vis: &'ast Visibility) { ... }
-        fn visit_fn_ret_ty(&mut self, ret_ty: &'ast FunctionRetTy) { ... }
+        fn visit_fn_ret_ty(&mut self, ret_ty: &'ast FnRetTy) { ... }
     }
 }

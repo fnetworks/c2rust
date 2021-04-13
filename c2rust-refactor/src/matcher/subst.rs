@@ -18,11 +18,11 @@
 //!    itemlike.  Use a zero-argument macro invocation `__x!()` instead.
 
 use smallvec::SmallVec;
-use syntax::ast::Mac;
-use syntax::ast::{Expr, ExprKind, Ident, ImplItem, Item, Label, Pat, Path, Stmt, Ty};
-use syntax::mut_visit::{self, MutVisitor};
-use syntax::ptr::P;
-use smallvec::smallvec;
+use rustc_ast::ast::MacCall;
+use rustc_ast::ast::{Expr, ExprKind, AssocItem, Item, Label, Pat, Path, Stmt, Ty};
+use rustc_span::symbol::Ident;
+use rustc_ast::mut_visit::{self, MutVisitor};
+use rustc_ast::ptr::P;
 
 use crate::ast_manip::util::PatternSymbol;
 use crate::ast_manip::{AstNode, MutVisit};
@@ -148,7 +148,7 @@ impl<'a, 'tcx> MutVisitor for SubstFolder<'a, 'tcx> {
             .pattern_symbol()
             .and_then(|sym| self.bindings.get::<_, Stmt>(sym))
         {
-            smallvec![stmt.clone()]
+            SmallVec::from([stmt.clone()])
         } else if let Some(stmts) = s
             .pattern_symbol()
             .and_then(|sym| self.bindings.get::<_, Vec<Stmt>>(sym))
@@ -164,14 +164,14 @@ impl<'a, 'tcx> MutVisitor for SubstFolder<'a, 'tcx> {
             .pattern_symbol()
             .and_then(|sym| self.bindings.get::<_, P<Item>>(sym))
         {
-            smallvec![item.clone()]
+            SmallVec::from([item.clone()])
         } else {
             mut_visit::noop_flat_map_item(i, self)
         }
     }
 
-    fn visit_mac(&mut self, mac: &mut Mac) {
-        mut_visit::noop_visit_mac(mac, self)
+    fn visit_mac_call(&mut self, mac: &mut Mac) {
+        mut_visit::noop_visit_mac_call(mac, self)
     }
 }
 
@@ -234,8 +234,8 @@ subst_impl!(P<Pat>, fold_pat);
 subst_impl!(P<Ty>, fold_ty);
 subst_impl!(Stmt, fold_stmt);
 subst_impl!(P<Item>, fold_item);
-subst_impl!(ImplItem, fold_impl_item);
+subst_impl!(AssocItem, fold_assoc_item);
 
 multi_subst_impl!(Stmt, fold_stmt);
 multi_subst_impl!(P<Item>, fold_item);
-multi_subst_impl!(ImplItem, fold_impl_item);
+multi_subst_impl!(AssocItem, fold_assoc_item);

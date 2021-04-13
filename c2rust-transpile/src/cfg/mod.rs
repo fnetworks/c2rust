@@ -26,11 +26,10 @@ use std::io;
 use std::io::Write;
 use std::ops::Deref;
 use std::ops::Index;
-use syntax;
-use syntax::ast::{Arm, Expr, ExprKind, Lit, LitIntType, LitKind, Pat, Stmt, StmtKind};
-use syntax::print::pprust;
-use syntax::ptr::P;
-use syntax_pos::{DUMMY_SP, Span};
+use rustc_ast::ast::{Arm, Expr, ExprKind, Lit, LitIntType, LitKind, Pat, Stmt, StmtKind};
+use rustc_ast_pretty::pprust;
+use rustc_ast::ptr::P;
+use rustc_span::{DUMMY_SP, Span};
 
 use indexmap::{IndexMap, IndexSet};
 

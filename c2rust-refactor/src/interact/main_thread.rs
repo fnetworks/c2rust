@@ -11,12 +11,12 @@ use std::str::FromStr;
 use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use syntax::ast::*;
-use syntax::source_map::Span;
-use syntax::source_map::{FileLoader, RealFileLoader};
-use syntax::symbol::Symbol;
-use syntax::visit::{self, FnKind, Visitor};
-use syntax_pos::FileName;
+use rustc_ast::ast::*;
+use rustc_span::source_map::Span;
+use rustc_span::source_map::{FileLoader, RealFileLoader};
+use rustc_span::symbol::Symbol;
+use rustc_ast::visit::{self, FnKind, Visitor};
+use rustc_span::FileName;
 
 use crate::ast_manip::{GetNodeId, GetSpan, Visit};
 use crate::command::{self, RefactorState};
@@ -336,14 +336,9 @@ impl<'ast> Visitor<'ast> for CollectSpanVisitor {
         visit::walk_item(self, x)
     }
 
-    fn visit_trait_item(&mut self, x: &'ast TraitItem) {
+    fn visit_assoc_item(&mut self, x: &'ast AssocItem) {
         self.record(x);
-        visit::walk_trait_item(self, x)
-    }
-
-    fn visit_impl_item(&mut self, x: &'ast ImplItem) {
-        self.record(x);
-        visit::walk_impl_item(self, x)
+        visit::walk_assoc_item(self, x)
     }
 
     fn visit_foreign_item(&mut self, x: &'ast ForeignItem) {

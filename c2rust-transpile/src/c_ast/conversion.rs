@@ -1856,7 +1856,7 @@ impl ConversionContext {
                         .expect("Expected attribute array on var decl");
 
                     assert!(has_static_duration || has_thread_duration || !is_externally_visible,
-                            format!("Variable cannot be extern without also being static or thread-local: {}", ident));
+                            "Variable cannot be extern without also being static or thread-local: {}", ident);
 
                     let initializer = node.children
                         .get(0)

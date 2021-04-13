@@ -5,19 +5,19 @@ use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::mem;
 
 use crate::transform::Transform;
-use rustc::hir::def::{DefKind, Export, Namespace, PerNS, Res};
-use rustc::hir::def_id::DefId;
-use rustc::hir::{self, HirId, Node};
-use rustc::ty::{self, ParamEnv};
+use rustc_hir::def::{DefKind, Namespace, PerNS, Res};
+use rustc_middle::hir::exports::Export;
+use rustc_hir::def_id::DefId;
+use rustc_hir::{self, HirId, Node};
+use rustc_middle::ty::{self, ParamEnv};
 use rustc_target::spec::abi::{self, Abi};
-use syntax::ast::*;
-use syntax::attr::HasAttrs;
-use syntax::util::comments::{Comment, CommentStyle};
-use syntax::ptr::P;
-use syntax::symbol::kw;
-use syntax::util::map_in_place::MapInPlace;
-use syntax_pos::{BytePos, DUMMY_SP};
-use smallvec::smallvec;
+use rustc_ast::ast::*;
+use rustc_ast::ast_like::AstLike;
+use rustc_ast::util::comments::{Comment, CommentStyle};
+use rustc_ast::ptr::P;
+use rustc_span::symbol::kw;
+use rustc_data_structures::map_in_place::MapInPlace;
+use rustc_span::{BytePos, DUMMY_SP};
 
 use crate::ast_manip::util::{is_relative_path, join_visibility, namespace, split_uses, is_exported, is_c2rust_attr};
 use crate::ast_manip::{visit_nodes, AstEquiv, FlatMapNodes, MutVisitNodes};
@@ -1108,7 +1108,7 @@ enum DeclKind {
     ForeignItem(ForeignItem, Abi),
 }
 
-impl HasAttrs for DeclKind {
+impl AstLike for DeclKind {
     fn attrs(&self) -> &[Attribute] {
         match self {
             DeclKind::Item(i) => i.attrs(),

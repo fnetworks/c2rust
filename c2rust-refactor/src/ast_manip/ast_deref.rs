@@ -1,12 +1,12 @@
 use rustc_target::spec::abi::Abi;
-use syntax::ast::*;
-use syntax::token::{BinOpToken, DelimToken, Nonterminal, Token, TokenKind};
-use syntax::token::{Lit as TokenLit, LitKind as TokenLitKind};
-use syntax::ptr::P;
-use syntax::source_map::{Span, Spanned};
-use syntax::tokenstream::{DelimSpan, TokenStream, TokenTree};
-use syntax::ThinVec;
-use syntax_pos::hygiene::SyntaxContext;
+use rustc_ast::ast::*;
+use rustc_ast::token::{BinOpToken, DelimToken, Nonterminal, Token, TokenKind};
+use rustc_ast::token::{Lit as TokenLit, LitKind as TokenLitKind};
+use rustc_ast::ptr::P;
+use rustc_span::source_map::{Span, Spanned};
+use rustc_ast::tokenstream::{DelimSpan, TokenStream, TokenTree};
+use rustc_data_structures::thin_vec::ThinVec;
+use rustc_span::hygiene::SyntaxContext;
 
 pub trait AstDeref {
     type Target: ?Sized;

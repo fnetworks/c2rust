@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-use arena::SyncDroplessArena;
-use rustc::hir::def_id::DefId;
+use rustc_arena::DroplessArena;
+use rustc_hir::def_id::DefId;
 use rustc_index::vec::IndexVec;
-use syntax::ast::*;
-use syntax::source_map::DUMMY_SP;
-use syntax::mut_visit::{self, MutVisitor};
-use syntax::token::{self, Token, TokenKind, DelimToken};
-use syntax::ptr::P;
-use syntax::symbol::Symbol;
-use syntax::tokenstream::{TokenTree, TokenStream, DelimSpan};
+use rustc_ast::ast::*;
+use rustc_span::source_map::DUMMY_SP;
+use rustc_ast::mut_visit::{self, MutVisitor};
+use rustc_ast::token::{self, Token, TokenKind, DelimToken};
+use rustc_ast::ptr::P;
+use rustc_span::symbol::Symbol;
+use rustc_ast::tokenstream::{TokenTree, TokenStream, DelimSpan};
 use smallvec::{smallvec, SmallVec};
 
 use crate::ast_manip::{MutVisitNodes, MutVisit};
@@ -62,7 +62,7 @@ pub fn register_commands(reg: &mut Registry) {
 fn do_annotate(st: &CommandState,
                cx: &RefactorCtxt,
                label: Symbol) {
-    let arena = SyncDroplessArena::default();
+    let arena = DroplessArena::default();
     let analysis = ownership::analyze(&st, &cx, &arena);
 
     struct AnnotateFolder<'a, 'tcx: 'a> {
@@ -154,9 +154,9 @@ fn do_annotate(st: &CommandState,
             mut_visit::noop_flat_map_impl_item(i, self)
         }
 
-        fn flat_map_struct_field(&mut self, mut sf: StructField) -> SmallVec<[StructField; 1]> {
+        fn flat_map_field_def(&mut self, mut sf: FieldDef) -> SmallVec<[FieldDef; 1]> {
             if !self.st.marked(sf.id, self.label) {
-                return mut_visit::noop_flat_map_struct_field(sf, self);
+                return mut_visit::noop_flat_map_field_def(sf, self);
             }
 
             self.clean_attrs(&mut sf.attrs);
@@ -164,7 +164,7 @@ fn do_annotate(st: &CommandState,
                 sf.attrs.push(attr);
             }
 
-            mut_visit::noop_flat_map_struct_field(sf, self)
+            mut_visit::noop_flat_map_field_def(sf, self)
         }
     }
 
@@ -312,7 +312,7 @@ fn build_variant_attr(group: &str) -> Attribute {
 fn do_split_variants(st: &CommandState,
                      cx: &RefactorCtxt,
                      label: Symbol) {
-    let arena = SyncDroplessArena::default();
+    let arena = DroplessArena::default();
     let ana = ownership::analyze(&st, &cx, &arena);
 
     // Map from ExprPath/ExprMethodCall span to function ref idx within the caller.
@@ -506,7 +506,7 @@ fn callee_new_name(cx: &RefactorCtxt,
 /// of the ownership analysis.
 /// See `analysis/ownership/README.md` for details on ownership inference.
 fn do_mark_pointers(st: &CommandState, cx: &RefactorCtxt) {
-    let arena = SyncDroplessArena::default();
+    let arena = DroplessArena::default();
     let ana = ownership::analyze(&st, &cx, &arena);
 
     struct AnalysisTypeSource<'lty, 'tcx: 'lty> {

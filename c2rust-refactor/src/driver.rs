@@ -1,19 +1,19 @@
 //! Frontend logic for parsing and expanding ASTs.  This code largely mimics the behavior of
 //! `rustc_driver::run_compiler`.
 
-use rustc::dep_graph::DepGraph;
-use rustc::hir::map as hir_map;
-use rustc::hir;
-use rustc::lint::{self, LintStore};
-use rustc::session::config::Options as SessionOptions;
-use rustc::session::config::{Input, OutputFilenames};
-use rustc::session::{self, DiagnosticOutput, Session};
-use rustc::ty::steal::Steal;
-use rustc::ty::{self, GlobalCtxt, ResolverOutputs};
-use rustc::util::common::ErrorReported;
-use rustc_codegen_utils::codegen_backend::CodegenBackend;
+use rustc_middle::dep_graph::DepGraph;
+use rustc_middle::hir::map as hir_map;
+use rustc_hir as hir;
+use rustc_lint::{self, LintStore};
+use rustc_session::config::Options as SessionOptions;
+use rustc_session::config::{Input, OutputFilenames};
+use rustc_session::{self, DiagnosticOutput, Session};
+use rustc_data_structures::steal::Steal;
+use rustc_middle::ty::{self, GlobalCtxt, ResolverOutputs};
+use rustc_errors::ErrorReported;
+use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_data_structures::declare_box_region_type;
-use rustc_data_structures::sync::{Lock, Lrc};
+use rustc_data_structures::sync::Lrc;
 use rustc_driver;
 use rustc_errors::DiagnosticBuilder;
 use rustc_incremental::DepGraphFuture;
@@ -28,24 +28,24 @@ use std::mem;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
-use syntax::ast;
-use syntax::ast::DUMMY_NODE_ID;
-use syntax::ast::{
-    Block, BlockCheckMode, Expr, ForeignItem, ImplItem, Item, ItemKind, NodeId, Param, Pat, Stmt,
+use rustc_ast::ast;
+use rustc_ast::ast::DUMMY_NODE_ID;
+use rustc_ast::ast::{
+    Block, BlockCheckMode, Expr, ForeignItem, AssocItem, Item, ItemKind, NodeId, Param, Pat, Stmt,
     Ty, UnsafeSource,
 };
-use syntax_pos::hygiene::SyntaxContext;
+use rustc_span::hygiene::SyntaxContext;
 use rustc_parse::parser::Parser;
-use syntax::token::{self, TokenKind};
-use syntax;
+use rustc_ast::token::{self, TokenKind};
+use rustc_ast;
 use rustc_errors::PResult;
-use syntax::ptr::P;
-use syntax::source_map::SourceMap;
-use syntax::source_map::{FileLoader, RealFileLoader};
-use syntax::symbol::{kw, Symbol};
-use syntax::tokenstream::TokenTree;
-use syntax_pos::{FileName, Span, DUMMY_SP};
-use syntax_pos::edition::Edition;
+use rustc_ast::ptr::P;
+use rustc_span::source_map::SourceMap;
+use rustc_span::source_map::{FileLoader, RealFileLoader};
+use rustc_span::symbol::{kw, Symbol};
+use rustc_ast::tokenstream::TokenTree;
+use rustc_span::{FileName, Span, DUMMY_SP};
+use rustc_span::edition::Edition;
 
 use crate::ast_manip::remove_paren;
 use crate::command::{GenerationalTyCtxt, RefactorState, Registry};
@@ -137,7 +137,7 @@ impl<'a, 'tcx: 'a> RefactorCtxt<'a, 'tcx> {
 
 //         let mut control = CompileController::basic();
 //         control.provide = Box::new(move |providers| {
-//             use rustc::hir::def_id::CrateNum;
+//             use rustc_hir::def_id::CrateNum;
 //             use rustc::middle::privacy::AccessLevels;
 //             use rustc_data_structures::sync::Lrc;
 //             use rustc_privacy;
@@ -244,7 +244,7 @@ pub fn clone_config(config: &interface::Config) -> interface::Config {
 
 pub fn create_config(args: &[String]) -> interface::Config {
     let matches = rustc_driver::handle_options(args).expect("rustc arg parsing failed");
-    let sopts = session::config::build_session_options(&matches);
+    let sopts = rustc_session::config::build_session_options(&matches);
     let cfg = interface::parse_cfgspecs(matches.opt_strs("cfg"));
     let sopts = maybe_set_sysroot(sopts, args);
     let output_dir = matches.opt_str("out-dir").map(|o| PathBuf::from(&o));
@@ -286,12 +286,8 @@ where
     config.opts.incremental = None;
     config.file_loader = file_loader;
 
-    syntax::with_globals(Edition::Edition2018, move || {
-        ty::tls::GCX_PTR.set(&Lock::new(0), || {
-            ty::tls::with_thread_locals(|| {
-                interface::run_compiler_in_existing_thread_pool(config, f)
-            })
-        })
+    rustc_span::with_session_globals(Edition::Edition2018, move || {
+        interface::run_compiler(config, f)
     })
 }
 
@@ -310,13 +306,9 @@ where
     // Force disable incremental compilation.  It causes panics with multiple typechecking.
     config.opts.incremental = None;
 
-    syntax::with_globals(Edition::Edition2018, move || {
-        ty::tls::GCX_PTR.set(&Lock::new(0), || {
-            ty::tls::with_thread_locals(|| {
-                let state = RefactorState::new(config, cmd_reg, file_io, marks);
-                f(state)
-            })
-        })
+    rustc_span::with_session_globals(Edition::Edition2018, move || {
+        let state = RefactorState::new(config, cmd_reg, file_io, marks);
+        f(state)
     })
 }
 
@@ -330,9 +322,9 @@ pub struct Compiler {
     output_dir: Option<PathBuf>,
     output_file: Option<PathBuf>,
     crate_name: Option<String>,
-    register_lints: Option<Box<dyn Fn(&Session, &mut lint::LintStore) + Send + Sync>>,
+    register_lints: Option<Box<dyn Fn(&Session, &mut rustc_lint::LintStore) + Send + Sync>>,
     override_queries:
-        Option<fn(&Session, &mut ty::query::Providers<'_>, &mut ty::query::Providers<'_>)>,
+        Option<fn(&Session, &mut ty::query::Providers, &mut ty::query::Providers)>,
 }
 
 #[allow(dead_code)]
@@ -344,7 +336,7 @@ struct Queries<'tcx> {
     register_plugins: Query<(ast::Crate, Lrc<LintStore>)>,
     expansion: Query<(ast::Crate, Steal<Rc<RefCell<BoxedResolver>>>)>,
     dep_graph: Query<DepGraph>,
-    lower_to_hir: Query<(&'tcx hir::map::Forest, Steal<ResolverOutputs>)>,
+    lower_to_hir: Query<(&'tcx hir::Crate<'tcx>, Steal<ResolverOutputs>)>,
     prepare_outputs: Query<OutputFilenames>,
     global_ctxt: Query<BoxedGlobalCtxt>,
     ongoing_codegen: Query<Box<dyn Any>>,
@@ -462,7 +454,7 @@ pub fn build_session_from_args(
 ) -> Session {
     let matches = rustc_driver::handle_options(args).expect("rustc arg parsing failed");
 
-    let sopts = session::config::build_session_options(&matches);
+    let sopts = rustc_session::config::build_session_options(&matches);
     let sopts = maybe_set_sysroot(sopts, args);
 
     assert!(matches.free.len() == 1, "expected exactly one input file");
@@ -490,7 +482,7 @@ fn build_session(
     // collide with `DUMMY_SP` (which is `0 .. 0`).
     source_map.new_source_file(FileName::Custom("<dummy>".to_string()), " ".to_string());
 
-    let sess = session::build_session_with_source_map(
+    let sess = rustc_session::build_session_with_source_map(
         sopts,
         in_path,
         descriptions,
@@ -591,7 +583,7 @@ pub fn parse_items(sess: &Session, src: &str) -> Vec<P<Item>> {
 }
 
 #[cfg_attr(feature = "profile", flame)]
-pub fn parse_impl_items(sess: &Session, src: &str) -> Vec<ImplItem> {
+pub fn parse_impl_items(sess: &Session, src: &str) -> Vec<AssocItem> {
     // TODO: rustc no longer exposes `parse_impl_item_`. `parse_item` is a hacky
     // workaround that may cause suboptimal error messages.
     let mut p = make_parser(sess, &format!("impl ! {{ {} }}", src));

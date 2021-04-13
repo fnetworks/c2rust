@@ -5,8 +5,10 @@
 extern crate colored;
 extern crate dtoa;
 extern crate rustc_parse;
-extern crate syntax;
-extern crate syntax_pos;
+extern crate rustc_ast;
+extern crate rustc_ast_pretty;
+extern crate rustc_span;
+extern crate rustc_session;
 #[macro_use]
 extern crate indexmap;
 extern crate serde;
@@ -61,7 +63,7 @@ use crate::compile_cmds::get_compile_commands;
 use crate::convert_type::RESERVED_NAMES;
 pub use crate::translator::ReplaceMode;
 use std::prelude::v1::Vec;
-use syntax_pos::edition::Edition;
+use rustc_span::edition::Edition;
 
 type PragmaVec = Vec<(&'static str, Vec<&'static str>)>;
 type PragmaSet = indexmap::IndexSet<(&'static str, &'static str)>;
@@ -402,7 +404,7 @@ fn invoke_refactor(build_dir: &PathBuf) -> Result<(), Error> {
     let mut cmd_path = cmd_path.as_path().canonicalize().unwrap();
     cmd_path.pop(); // remove current executable
     cmd_path.push(format!("c2rust-refactor"));
-    assert!(cmd_path.exists(), format!("{:?} is missing", cmd_path));
+    assert!(cmd_path.exists(), "{:?} is missing", cmd_path);
     let args = [
         "--cargo",
         "--rewrite-mode",
@@ -520,7 +522,7 @@ fn transpile_single(
 
     // Perform the translation
     let (translated_string, pragmas, crates) =
-        syntax::with_globals(Edition::Edition2018, move || {
+        rustc_span::with_session_globals(Edition::Edition2018, move || {
             translator::translate(typed_context, &tcfg, input_path)
         });
 

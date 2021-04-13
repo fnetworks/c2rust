@@ -10,10 +10,10 @@
 //! are absent from the original `Item`.
 //!
 //! Aside from the special handling of qualifiers, this strategy works the same as `recursive`.
-use syntax::ast::*;
-use syntax::token::{DelimToken, Token, TokenKind};
-use syntax::source_map::{BytePos, Span};
-use syntax::tokenstream::{TokenStream, TokenTree};
+use rustc_ast::ast::*;
+use rustc_ast::token::{DelimToken, Token, TokenKind};
+use rustc_span::source_map::{BytePos, Span};
+use rustc_ast::tokenstream::{TokenStream, TokenTree};
 
 use crate::ast_manip::AstEquiv;
 use crate::rewrite::base::{describe, rewrite_seq_comma_sep};
@@ -39,9 +39,9 @@ fn span_empty(sp: Span) -> bool {
 // fn find_fn_header_spans<'a>(p: &mut Parser<'a>) -> PResult<'a, FnHeaderSpans> {
 //     // Skip over any attributes that were included in the token stream.
 //     loop {
-//         if matches!([p.token.kind] TokenKind::DocComment(..)) {
+//         if cmatches!([p.token.kind] TokenKind::DocComment(..)) {
 //             p.bump();
-//         } else if matches!([p.token.kind] TokenKind::Pound) {
+//         } else if cmatches!([p.token.kind] TokenKind::Pound) {
 //             // I don't think we should ever see inner attributes inside `item.tokens`, but allow
 //             // them just in case.
 //             p.parse_attribute(true)?;
@@ -73,7 +73,7 @@ fn span_empty(sp: Span) -> bool {
 
 //     let abi = if p.eat(&TokenKind::Ident(kw::Extern, false)) {
 //         let extern_span = p.prev_span;
-//         if matches!([p.token.kind] TokenKind::Literal(..)) {
+//         if cmatches!([p.token.kind] TokenKind::Literal(..)) {
 //             // Just assume it's a valid abi string token.  If it wasn't, these tokens wouldn't have
 //             // parsed as an item to begin with.
 //             p.bump();
@@ -109,9 +109,9 @@ fn span_empty(sp: Span) -> bool {
 // fn find_item_header_spans<'a>(p: &mut Parser<'a>) -> PResult<'a, ItemHeaderSpans> {
 //     // Skip over any attributes that were included in the token stream.
 //     loop {
-//         if matches!([p.token.kind] TokenKind::DocComment(..)) {
+//         if cmatches!([p.token.kind] TokenKind::DocComment(..)) {
 //             p.bump();
-//         } else if matches!([p.token.kind] TokenKind::Pound) {
+//         } else if cmatches!([p.token.kind] TokenKind::Pound) {
 //             // I don't think we should ever see inner attributes inside `item.tokens`, but allow
 //             // them just in case.
 //             p.parse_attribute(true)?;
@@ -228,7 +228,7 @@ fn rewrite_arg_list_with_tokens(
                         // This token is just past the end of the current arg.
                         past_arg = true;
                     }
-                    if past_arg && matches!([tt] TokenTree::Token(Token {
+                    if past_arg && cmatches!([tt] TokenTree::Token(Token {
                         kind: TokenKind::Comma,
                         ..
                     })) {

@@ -1,7 +1,8 @@
 //! This modules handles converting `Vec<Structure>` into `Vec<Stmt>`.
 
-use syntax::source_map::{dummy_spanned, Spanned};
-use syntax_pos::BytePos;
+use rustc_span::BytePos;
+use rustc_span::source_map::{dummy_spanned, Spanned};
+use rustc_ast::ast;
 
 use super::*;
 
@@ -618,26 +619,26 @@ impl StructureState {
 
                 // TODO: this is ugly but it needn't be. We are just pattern matching on particular ASTs.
                 if let Some(&Stmt {
-                    kind: syntax::ast::StmtKind::Expr(ref expr),
+                    kind: ast::StmtKind::Expr(ref expr),
                     span: stmt_span,
                     ..
                 }) = body.first()
                 {
                     let span = if !stmt_span.is_dummy() { stmt_span } else { span };
-                    if let syntax::ast::ExprKind::If(ref cond, ref thn, None) = expr.kind {
-                        if let &syntax::ast::Block {
+                    if let ast::ExprKind::If(ref cond, ref thn, None) = expr.kind {
+                        if let &ast::Block {
                             ref stmts,
-                            rules: syntax::ast::BlockCheckMode::Default,
+                            rules: ast::BlockCheckMode::Default,
                             ..
                         } = thn.deref()
                         {
                             if stmts.len() == 1 {
                                 if let Some(&Stmt {
-                                    kind: syntax::ast::StmtKind::Semi(ref expr),
+                                    kind: ast::StmtKind::Semi(ref expr),
                                     ..
                                 }) = stmts.iter().nth(0)
                                 {
-                                    if let syntax::ast::ExprKind::Break(None, None) = expr.kind {
+                                    if let ast::ExprKind::Break(None, None) = expr.kind {
                                         let e = mk().while_expr(
                                             not(cond),
                                             mk().span(body_span).block(body.iter().skip(1).cloned().collect()),
@@ -679,7 +680,7 @@ impl StructureState {
 ///
 fn not(bool_expr: &P<Expr>) -> P<Expr> {
     match bool_expr.kind {
-        ExprKind::Unary(syntax::ast::UnOp::Not, ref e) => e.clone(),
+        ExprKind::Unary(ast::UnOp::Not, ref e) => e.clone(),
         _ => mk().unary_expr("!", bool_expr.clone()),
     }
 }

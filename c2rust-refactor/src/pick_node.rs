@@ -1,14 +1,14 @@
 //! Helper functions for picking a node by source location.
 //!
 //! This is used in various parts of the frontend to set marks at specific locations.
-use rustc::session::Session;
+use rustc_session::Session;
 use std::path::PathBuf;
 use std::str::FromStr;
-use syntax::ast::*;
-use syntax_pos::hygiene::SyntaxContext;
-use syntax::source_map::{BytePos, Span};
-use syntax::visit::{self, FnKind, Visitor};
-use syntax_pos::FileName;
+use rustc_ast::ast::*;
+use rustc_span::hygiene::SyntaxContext;
+use rustc_span::source_map::{BytePos, Span};
+use rustc_ast::visit::{self, FnKind, Visitor};
+use rustc_span::FileName;
 
 use crate::ast_manip::Visit;
 use crate::command::{DriverCommand, Registry};
@@ -58,23 +58,10 @@ impl<'a> Visitor<'a> for PickVisitor {
         }
     }
 
-    fn visit_trait_item(&mut self, x: &'a TraitItem) {
-        visit::walk_trait_item(self, x);
+    fn visit_assoc_item(&mut self, x: &'a AssocItem) {
+        visit::walk_assoc_item(self, x);
         if self.node_info.is_none()
-            && self.kind.contains(NodeKind::TraitItem)
-            && x.span.contains(self.target)
-        {
-            self.node_info = Some(NodeInfo {
-                id: x.id,
-                span: x.span,
-            });
-        }
-    }
-
-    fn visit_impl_item(&mut self, x: &'a ImplItem) {
-        visit::walk_impl_item(self, x);
-        if self.node_info.is_none()
-            && self.kind.contains(NodeKind::ImplItem)
+            && self.kind.contains(NodeKind::AssocItem)
             && x.span.contains(self.target)
         {
             self.node_info = Some(NodeInfo {
@@ -169,8 +156,8 @@ impl<'a> Visitor<'a> for PickVisitor {
         }
     }
 
-    fn visit_struct_field(&mut self, x: &'a StructField) {
-        visit::walk_struct_field(self, x);
+    fn visit_field_def(&mut self, x: &'a FieldDef) {
+        visit::walk_field_def(self, x);
         if self.node_info.is_none()
             && self.kind.contains(NodeKind::Field)
             && x.span.contains(self.target)
@@ -182,7 +169,7 @@ impl<'a> Visitor<'a> for PickVisitor {
         }
     }
 
-    fn visit_mac(&mut self, mac: &'a Mac) {
+    fn visit_mac_call(&mut self, mac: &'a MacCall) {
         visit::walk_mac(self, mac);
     }
 }

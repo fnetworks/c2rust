@@ -1,17 +1,20 @@
 use super::*;
 
-use crate::ast;
-use crate::source_map;
-use crate::with_default_globals;
-use syntax_pos;
+use rustc_ast::ast;
+use rustc_span::with_default_session_globals;
+use rustc_span::symbol;
 
 fn fun_to_string(
-    decl: &ast::FnDecl, header: ast::FnHeader, name: ast::Ident, generics: &ast::Generics
+    decl: &ast::FnDecl, header: ast::FnHeader, name: symbol::Ident, generics: &ast::Generics
 ) -> String {
+    let vis = ast::Visibility {
+        kind: ast::VisibilityKind::Inherited,
+        span: rustc_span::DUMMY_SP,
+        tokens: None,
+    };
     to_string(|s| {
         s.head("");
-        s.print_fn(decl, header, Some(name),
-                   generics, &source_map::dummy_spanned(ast::VisibilityKind::Inherited));
+        s.print_fn(decl, header, Some(name), generics, &vis);
         s.end(); // Close the head box.
         s.end(); // Close the outer box.
     })
@@ -23,12 +26,12 @@ fn variant_to_string(var: &ast::Variant) -> String {
 
 #[test]
 fn test_fun_to_string() {
-    with_default_globals(|| {
-        let abba_ident = ast::Ident::from_str("abba");
+    with_default_session_globals(|| {
+        let abba_ident = symbol::Ident::from_str("abba");
 
         let decl = ast::FnDecl {
             inputs: Vec::new(),
-            output: ast::FunctionRetTy::Default(syntax_pos::DUMMY_SP),
+            output: ast::FnRetTy::Default(rustc_span::DUMMY_SP),
         };
         let generics = ast::Generics::default();
         assert_eq!(
@@ -45,17 +48,22 @@ fn test_fun_to_string() {
 
 #[test]
 fn test_variant_to_string() {
-    with_default_globals(|| {
-        let ident = ast::Ident::from_str("principal_skinner");
+    with_default_session_globals(|| {
+        let ident = symbol::Ident::from_str("principal_skinner");
+        let vis = ast::Visibility {
+            kind: ast::VisibilityKind::Inherited,
+            span: rustc_span::DUMMY_SP,
+            tokens: None,
+        };
 
         let var = ast::Variant {
             ident,
-            vis: source_map::respan(syntax_pos::DUMMY_SP, ast::VisibilityKind::Inherited),
+            vis,
             attrs: Vec::new(),
             id: ast::DUMMY_NODE_ID,
             data: ast::VariantData::Unit(ast::DUMMY_NODE_ID),
             disr_expr: None,
-            span: syntax_pos::DUMMY_SP,
+            span: rustc_span::DUMMY_SP,
             is_placeholder: false,
         };
 

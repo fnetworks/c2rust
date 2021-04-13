@@ -6,19 +6,19 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use c2rust_ast_builder::mk;
-use rustc::hir::def::Res;
-use rustc::hir::HirId;
+use rustc_hir::def::Res;
+use rustc_hir::HirId;
 use rustc_target::spec::abi::{Abi, lookup as lookup_abi};
-use syntax::ast::*;
-use syntax::ptr::P;
-use syntax::mut_visit::*;
-use syntax::token::{BinOpToken, DelimToken, Nonterminal, Token, TokenKind};
-use syntax::token::{Lit as TokenLit, LitKind as TokenLitKind};
-use syntax::source_map::{DUMMY_SP, Spanned, dummy_spanned};
-use syntax::symbol::{Symbol, sym};
-use syntax::tokenstream::{DelimSpan, TokenStream, TokenTree};
-use syntax::ThinVec;
-use syntax_pos::{Span, SyntaxContext};
+use rustc_ast::ast::*;
+use rustc_ast::ptr::P;
+use rustc_ast::mut_visit::*;
+use rustc_ast::token::{BinOpToken, DelimToken, Nonterminal, Token, TokenKind};
+use rustc_ast::token::{Lit as TokenLit, LitKind as TokenLitKind};
+use rustc_span::source_map::{DUMMY_SP, Spanned, dummy_spanned};
+use rustc_span::symbol::{Ident, Symbol, sym};
+use rustc_ast::tokenstream::{DelimSpan, TokenStream, TokenTree};
+use rustc_data_structures::thin_vec::ThinVec;
+use rustc_span::{Span, SyntaxContext};
 
 use rlua::{Context, Error, FromLua, Function, MetaMethod, Result, Scope, ToLua, UserData, UserDataMethods, Value};
 use rlua::prelude::{LuaString, LuaTable};
@@ -938,7 +938,7 @@ impl UserData for LuaAstNode<Res> {
 }
 
 #[derive(Clone)]
-struct SpanData(syntax_pos::SpanData);
+struct SpanData(rustc_span::SpanData);
 
 impl UserData for SpanData {}
 
@@ -1176,9 +1176,9 @@ impl AddMoreMethods for LuaAstNode<P<Expr>> {
         methods.add_method("to_addr_of", |lua_ctx, this, (expr, mutable): (Value, bool)| {
             let expr = FromLuaExt::from_lua_ext(expr, lua_ctx)?;
             let mutability = if mutable {
-                Mutability::Mutable
+                Mutability::Mut
             } else {
-                Mutability::Immutable
+                Mutability::Not
             };
 
             this.borrow_mut().kind = ExprKind::AddrOf(BorrowKind::Ref, mutability, expr);
@@ -1237,7 +1237,7 @@ impl AddMoreMethods for LuaAstNode<P<Expr>> {
                 pat: P(Pat {
                     id: DUMMY_NODE_ID,
                     kind: PatKind::Ident(
-                        BindingMode::ByValue(Mutability::Immutable),
+                        BindingMode::ByValue(Mutability::Not),
                         Ident::from_str(s.to_str()?),
                         None,
                     ),
@@ -1249,7 +1249,7 @@ impl AddMoreMethods for LuaAstNode<P<Expr>> {
             })).collect();
             let fn_decl = P(FnDecl {
                 inputs: inputs?,
-                output: FunctionRetTy::Default(DUMMY_SP),
+                output: FnRetTy::Default(DUMMY_SP),
             });
 
             this.borrow_mut().kind = ExprKind::Closure(
@@ -1565,9 +1565,9 @@ impl AddMoreMethods for LuaAstNode<MutTy> {
 
         methods.add_method("set_mutable", |_lua_ctx, this, mutable: bool| {
             this.borrow_mut().mutbl = if mutable {
-                Mutability::Mutable
+                Mutability::Mut
             } else {
-                Mutability::Immutable
+                Mutability::Not
             };
 
             Ok(())
@@ -1874,10 +1874,10 @@ impl AddMoreMethods for LuaAstNode<Param> {
         methods.add_method("set_binding", |_lua_ctx, this, binding_str: LuaString| {
             if let PatKind::Ident(binding, ..) = &mut this.borrow_mut().pat.kind {
                 *binding = match binding_str.to_str()? {
-                    "ByRefMut" => BindingMode::ByRef(Mutability::Mutable),
-                    "ByRefImmut" => BindingMode::ByRef(Mutability::Immutable),
-                    "ByValMut" => BindingMode::ByValue(Mutability::Mutable),
-                    "ByValImmut" => BindingMode::ByValue(Mutability::Immutable),
+                    "ByRefMut" => BindingMode::ByRef(Mutability::Mut),
+                    "ByRefImmut" => BindingMode::ByRef(Mutability::Not),
+                    "ByValMut" => BindingMode::ByValue(Mutability::Mut),
+                    "ByValImmut" => BindingMode::ByValue(Mutability::Not),
                     _ => panic!("Unknown binding kind"),
                 };
             }
@@ -1898,7 +1898,7 @@ impl AddMoreMethods for LuaAstNode<Param> {
 
 impl AddMoreMethods for LuaAstNode<FnHeader> {}
 
-impl AddMoreMethods for LuaAstNode<StructField> {
+impl AddMoreMethods for LuaAstNode<FieldDef> {
     fn add_more_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_method("get_attrs", |_lua_ctx, this, ()| {
             Ok(this.borrow()

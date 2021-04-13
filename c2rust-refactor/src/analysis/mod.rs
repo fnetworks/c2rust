@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use crate::command::{DriverCommand, Registry};
 use crate::driver::Phase;
-use arena::SyncDroplessArena;
+use rustc_arena::DroplessArena;
 use c2rust_ast_builder::IntoSymbol;
 
 pub mod labeled_ty;
@@ -37,7 +37,7 @@ fn register_test_analysis_type_eq(reg: &mut Registry) {
 fn register_test_analysis_ownership(reg: &mut Registry) {
     reg.register("test_analysis_ownership", |_args| {
         Box::new(DriverCommand::new(Phase::Phase3, move |st, cx| {
-            let arena = SyncDroplessArena::default();
+            let arena = DroplessArena::default();
             let results = ownership::analyze(&st, &cx, &arena);
             ownership::dump_results(&cx, &results);
         }))

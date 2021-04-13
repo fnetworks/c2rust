@@ -9,15 +9,15 @@ use c2rust_ast_builder::mk;
 use rustc_data_structures::sync::Lrc;
 use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use syntax::ast::*;
-use syntax::attr;
-use syntax::mut_visit::{self, MutVisitor};
-use syntax::token::{Nonterminal, Token, TokenKind};
-use syntax::ptr::P;
-use syntax::source_map::{BytePos, Span};
-use syntax::tokenstream::{self, TokenStream, TokenTree};
-use syntax_pos::sym;
-use smallvec::smallvec;
+use rustc_ast::ast::*;
+use rustc_ast::attr;
+use rustc_ast::mut_visit::{self, MutVisitor};
+use rustc_ast::token::{Nonterminal, Token, TokenKind};
+use rustc_ast::ptr::P;
+use rustc_span::source_map::{BytePos, Span};
+use rustc_ast::tokenstream::{self, TokenStream, TokenTree};
+use rustc_span::sym;
+use rustc_session::Session;
 
 use super::mac_table::{InvocId, InvocKind, MacTable};
 use super::nt_match::{self, NtMatch};
@@ -48,6 +48,8 @@ struct CollapseMacros<'a> {
     token_rewrites: Vec<RewriteItem>,
 
     matched_ids: &'a mut Vec<(NodeId, NodeId)>,
+
+    sess: &'a Session,
 }
 
 impl<'a> CollapseMacros<'a> {
@@ -66,7 +68,7 @@ impl<'a> CollapseMacros<'a> {
         for (span, nt) in nt_match::match_nonterminals(old, new) {
             trace!(
                 "  got {} at {:?}",
-                ::syntax::print::pprust::token_to_string(&Token {
+                rustc_ast_pretty::pprust::token_to_string(&Token {
                     kind: TokenKind::Interpolated(Lrc::new(nt.clone())),
                     span,
                 }),
@@ -173,7 +175,7 @@ impl<'a> MutVisitor for CollapseMacros<'a> {
                         s = new_s;
                     } else {
                         trace!("collapse (duplicate): {:?} -> /**/", s);
-                        return smallvec![];
+                        return SmallVec::new();
                     }
                 }
                 InvocKind::Attrs(attrs) => {
@@ -181,13 +183,13 @@ impl<'a> MutVisitor for CollapseMacros<'a> {
                     match &mut s.kind {
                         StmtKind::Local(l) => {
                             let mut new_attrs = l.attrs.to_vec();
-                            restore_attrs(&mut new_attrs, attrs);
+                            restore_attrs(&mut new_attrs, attrs, self.sess);
                             l.attrs = new_attrs.into();
                         }
-                        StmtKind::Item(i) => restore_attrs(&mut i.attrs, attrs),
+                        StmtKind::Item(i) => restore_attrs(&mut i.attrs, attrs, self.sess),
                         StmtKind::Expr(e) | StmtKind::Semi(e) => {
                             let mut new_attrs = e.attrs.to_vec();
-                            restore_attrs(&mut new_attrs, attrs);
+                            restore_attrs(&mut new_attrs, attrs, self.sess);
                             e.attrs = new_attrs.into();
                         }
                         StmtKind::Mac(..) => {}
@@ -196,7 +198,7 @@ impl<'a> MutVisitor for CollapseMacros<'a> {
                 }
                 InvocKind::Derive(_parent_invoc_id) => {
                     trace!("Derive: drop (generated): {:?} -> /**/", s);
-                    return smallvec![];
+                    return SmallVec::new();
                 }
             }
         }
@@ -225,24 +227,24 @@ impl<'a> MutVisitor for CollapseMacros<'a> {
                         i = new_i;
                     } else {
                         trace!("collapse (duplicate): {:?} -> /**/", i);
-                        return smallvec![];
+                        return SmallVec::new();
                     }
                 }
                 InvocKind::Attrs(attrs) => {
                     trace!("Attrs: return original: {:?}", i);
-                    restore_attrs(&mut i.attrs, attrs);
+                    restore_attrs(&mut i.attrs, attrs, self.sess);
                     self.record_matched_ids(i.id, i.id);
                 }
                 InvocKind::Derive(_parent_invoc_id) => {
                     trace!("Derive: drop (generated): {:?} -> /**/", i);
-                    return smallvec![];
+                    return SmallVec::new();
                 }
             }
         }
         mut_visit::noop_flat_map_item(i, self)
     }
 
-    fn flat_map_impl_item(&mut self, ii: ImplItem) -> SmallVec<[ImplItem; 1]> {
+    fn flat_map_impl_item(&mut self, ii: AssocItem) -> SmallVec<[AssocItem; 1]> {
         if let Some(info) = self.mac_table.get(ii.id) {
             if let InvocKind::Mac(mac) = info.invoc {
                 let old = info
@@ -253,7 +255,7 @@ impl<'a> MutVisitor for CollapseMacros<'a> {
                         ii,
                         info.expanded,
                     ));
-                self.collect_token_rewrites(info.id, old, &ii as &ImplItem);
+                self.collect_token_rewrites(info.id, old, &ii as &AssocItem);
 
                 if !self.seen_invocs.contains(&info.id) {
                     self.seen_invocs.insert(info.id);
@@ -263,19 +265,19 @@ impl<'a> MutVisitor for CollapseMacros<'a> {
                         .mac_impl_item(mac);
                     trace!("collapse: {:?} -> {:?}", ii, new_ii);
                     self.record_matched_ids(ii.id, new_ii.id);
-                    return smallvec![new_ii];
+                    return SmallVec::new([new_ii]);
                 } else {
                     trace!("collapse (duplicate): {:?} -> /**/", ii);
-                    return smallvec![];
+                    return SmallVec::new();
                 }
             } else {
                 warn!("bad macro kind for impl item: {:?}", info.invoc);
             }
         }
-        mut_visit::noop_flat_map_impl_item(ii, self)
+        mut_visit::noop_flat_map_assoc_item(ii, self)
     }
 
-    fn flat_map_trait_item(&mut self, ti: TraitItem) -> SmallVec<[TraitItem; 1]> {
+    fn flat_map_trait_item(&mut self, ti: AssocItem) -> SmallVec<[AssocItem; 1]> {
         if let Some(info) = self.mac_table.get(ti.id) {
             if let InvocKind::Mac(mac) = info.invoc {
                 let old = info
@@ -286,7 +288,7 @@ impl<'a> MutVisitor for CollapseMacros<'a> {
                         ti,
                         info.expanded,
                     ));
-                self.collect_token_rewrites(info.id, old, &ti as &TraitItem);
+                self.collect_token_rewrites(info.id, old, &ti as &AssocItem);
 
                 if !self.seen_invocs.contains(&info.id) {
                     self.seen_invocs.insert(info.id);
@@ -296,16 +298,16 @@ impl<'a> MutVisitor for CollapseMacros<'a> {
                         .mac_trait_item(mac);
                     trace!("collapse: {:?} -> {:?}", ti, new_ti);
                     self.record_matched_ids(ti.id, new_ti.id);
-                    return smallvec![new_ti];
+                    return SmallVec::new([new_ti]);
                 } else {
                     trace!("collapse (duplicate): {:?} -> /**/", ti);
-                    return smallvec![];
+                    return SmallVec::new();
                 }
             } else {
                 warn!("bad macro kind for trait item: {:?}", info.invoc);
             }
         }
-        mut_visit::noop_flat_map_trait_item(ti, self)
+        mut_visit::noop_flat_map_assoc_item(ti, self)
     }
 
     fn flat_map_foreign_item(&mut self, fi: ForeignItem) -> SmallVec<[ForeignItem; 1]> {
@@ -329,10 +331,10 @@ impl<'a> MutVisitor for CollapseMacros<'a> {
                         .mac_foreign_item(mac);
                     trace!("collapse: {:?} -> {:?}", fi, new_fi);
                     self.record_matched_ids(fi.id, new_fi.id);
-                    return smallvec![new_fi];
+                    return SmallVec::new([new_fi]);
                 } else {
                     trace!("collapse (duplicate): {:?} -> /**/", fi);
-                    return smallvec![];
+                    return SmallVec::new();
                 }
             } else {
                 warn!("bad macro kind for trait item: {:?}", info.invoc);
@@ -341,7 +343,7 @@ impl<'a> MutVisitor for CollapseMacros<'a> {
         mut_visit::noop_flat_map_foreign_item(fi, self)
     }
 
-    fn visit_mac(&mut self, mac: &mut Mac) {
+    fn visit_mac_call(&mut self, mac: &mut MacCall) {
         mut_visit::noop_visit_mac(mac, self)
     }
 }
@@ -351,18 +353,18 @@ impl<'a> MutVisitor for CollapseMacros<'a> {
 /// transform, we can't just copy `old.attrs`.  Instead, we look through `old.attrs` for attributes
 /// with known effects (such as `#[cfg]`, which removes itself when the condition is met) and tries
 /// to reverse those specific effects on `new.attrs`.
-fn restore_attrs(new_attrs: &mut Vec<Attribute>, old_attrs: &[Attribute]) {
+fn restore_attrs(new_attrs: &mut Vec<Attribute>, old_attrs: &[Attribute], sess: &Session) {
     // If the original item had a `#[derive]` attr, transfer it to the new one.
     // TODO: handle multiple instances of `#[derive]`
     // TODO: try to keep attrs in the same order
-    if let Some(attr) = attr::find_by_name(old_attrs, sym::derive) {
-        if !attr::contains_name(&new_attrs, sym::derive) {
+    if let Some(attr) = sess.find_by_name(old_attrs, sym::derive) {
+        if !sess.contains_name(&new_attrs, sym::derive) {
             new_attrs.push(attr.clone());
         }
     }
 
-    if let Some(attr) = attr::find_by_name(old_attrs, sym::cfg) {
-        if !attr::contains_name(&new_attrs, sym::cfg) {
+    if let Some(attr) = sess.find_by_name(old_attrs, sym::cfg) {
+        if !sess.contains_name(&new_attrs, sym::cfg) {
             new_attrs.push(attr.clone());
         }
     }
@@ -584,10 +586,10 @@ impl<'a> MutVisitor for ReplaceTokens<'a> {
                     *mac.args = new_args;
                     (mac, style, attrs)
                 });
-                return smallvec![Stmt {
+                return SmallVec::new([Stmt {
                     kind: StmtKind::Mac(mac),
                     ..s
-                }];
+                }]);
             }
         }
         mut_visit::noop_flat_map_stmt(s, self)
@@ -596,35 +598,35 @@ impl<'a> MutVisitor for ReplaceTokens<'a> {
     fn flat_map_item(&mut self, i: P<Item>) -> SmallVec<[P<Item>; 1]> {
         if let Some(invoc_id) = self.mac_table.get(i.id).map(|m| m.id) {
             if let Some(new_args) = self.new_args.get(&invoc_id).cloned() {
-                return smallvec![i.map(|mut i| {
+                return SmallVec::new([i.map(|mut i| {
                     expect!([i.kind] ItemKind::Mac(ref mut mac) => *mac.args = new_args);
                     i
-                })];
+                })]);
             }
         }
         mut_visit::noop_flat_map_item(i, self)
     }
 
-    fn flat_map_impl_item(&mut self, ii: ImplItem) -> SmallVec<[ImplItem; 1]> {
+    fn flat_map_impl_item(&mut self, ii: AssocItem) -> SmallVec<[AssocItem; 1]> {
         if let Some(invoc_id) = self.mac_table.get(ii.id).map(|m| m.id) {
             if let Some(new_args) = self.new_args.get(&invoc_id).cloned() {
                 let mut ii = ii;
-                expect!([ii.kind] ImplItemKind::Macro(ref mut mac) => *mac.args = new_args);
-                return smallvec![ii];
+                expect!([ii.kind] AssocItemKind::Macro(ref mut mac) => *mac.args = new_args);
+                return SmallVec::new([ii]);
             }
         }
-        mut_visit::noop_flat_map_impl_item(ii, self)
+        mut_visit::noop_flat_map_assoc_item(ii, self)
     }
 
-    fn flat_map_trait_item(&mut self, ti: TraitItem) -> SmallVec<[TraitItem; 1]> {
+    fn flat_map_trait_item(&mut self, ti: AssocItem) -> SmallVec<[AssocItem; 1]> {
         if let Some(invoc_id) = self.mac_table.get(ti.id).map(|m| m.id) {
             if let Some(new_args) = self.new_args.get(&invoc_id).cloned() {
                 let mut ti = ti;
-                expect!([ti.kind] TraitItemKind::Macro(ref mut mac) => *mac.args = new_args);
-                return smallvec![ti];
+                expect!([ti.kind] AssocItemKind::Macro(ref mut mac) => *mac.args = new_args);
+                return SmallVec::new([ti]);
             }
         }
-        mut_visit::noop_flat_map_trait_item(ti, self)
+        mut_visit::noop_flat_map_assoc_item(ti, self)
     }
 
     fn flat_map_foreign_item(&mut self, fi: ForeignItem) -> SmallVec<[ForeignItem; 1]> {
@@ -632,13 +634,13 @@ impl<'a> MutVisitor for ReplaceTokens<'a> {
             if let Some(new_args) = self.new_args.get(&invoc_id).cloned() {
                 let mut fi = fi;
                 expect!([fi.kind] ForeignItemKind::Macro(ref mut mac) => *mac.args = new_args);
-                return smallvec![fi];
+                return SmallVec::new([fi]);
             }
         }
         mut_visit::noop_flat_map_foreign_item(fi, self)
     }
 
-    fn visit_mac(&mut self, mac: &mut Mac) {
+    fn visit_mac_call(&mut self, mac: &mut MacCall) {
         mut_visit::noop_visit_mac(mac, self)
     }
 
@@ -647,13 +649,14 @@ impl<'a> MutVisitor for ReplaceTokens<'a> {
     }
 }
 
-pub fn collapse_macros(krate: &mut Crate, mac_table: &MacTable) -> Vec<(NodeId, NodeId)> {
+pub fn collapse_macros(krate: &mut Crate, mac_table: &MacTable, sess: &Session) -> Vec<(NodeId, NodeId)> {
     let mut matched_ids = Vec::new();
 
     let token_rewrites: Vec<RewriteItem>;
     {
         let mut collapse_macros = CollapseMacros {
             mac_table,
+            sess,
             seen_invocs: HashSet::new(),
             token_rewrites: Vec::new(),
             matched_ids: &mut matched_ids,
@@ -667,7 +670,7 @@ pub fn collapse_macros(krate: &mut Crate, mac_table: &MacTable) -> Vec<(NodeId, 
         debug!(
             "new tokens for {:?} = {:?}",
             k,
-            ::syntax::print::pprust::tts_to_string(v.inner_tokens().clone())
+            rustc_ast_pretty::pprust::tts_to_string(v.inner_tokens().clone())
         );
     }
 

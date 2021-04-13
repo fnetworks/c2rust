@@ -1,8 +1,8 @@
-use rustc::ty;
-use syntax::ast::*;
-use syntax::ptr::P;
+use rustc_middle::ty;
+use rustc_ast::ast::*;
+use rustc_ast::ptr::P;
+use rustc_span::symbol::Ident;
 
-use smallvec::smallvec;
 
 use crate::ast_manip::{fold_blocks, FlatMapNodes, AstEquiv};
 use crate::command::{CommandState, Registry};
@@ -12,6 +12,7 @@ use crate::path_edit::fold_resolved_paths;
 use crate::transform::Transform;
 use c2rust_ast_builder::{mk, IntoSymbol};
 use crate::RefactorCtxt;
+use smallvec::SmallVec;
 
 
 /// # `struct_assign_to_update` Command
@@ -124,14 +125,14 @@ fn is_struct_update_for(s: &Stmt, base1: &Expr) -> bool {
               return false)
 }
 
-fn unpack_struct_update(s: Stmt) -> (Path, Vec<Field>, P<Expr>) {
+fn unpack_struct_update(s: Stmt) -> (Path, Vec<ExprField>, P<Expr>) {
     let e = expect!([s.kind] StmtKind::Semi(e) => e);
     let rhs = expect!([e.into_inner().kind] ExprKind::Assign(_, rhs) => rhs);
     expect!([rhs.into_inner().kind]
             ExprKind::Struct(path, fields, Some(base)) => (path, fields, base))
 }
 
-fn build_struct_update(path: Path, fields: Vec<Field>, base: P<Expr>) -> Stmt {
+fn build_struct_update(path: Path, fields: Vec<ExprField>, base: P<Expr>) -> Stmt {
     mk().semi_stmt(
         mk().assign_expr(
             &base,
@@ -159,22 +160,22 @@ impl Transform for Rename {
         // Find the struct definition and rename it.
         FlatMapNodes::visit(krate, |i: P<Item>| {
             if target_def_id.is_some() || !st.marked(i.id, "target") {
-                return smallvec![i];
+                return SmallVec::new([i]);
             }
 
             // Make sure this is actually a struct declaration, and not, say, the target
             // declaration's containing module.
             if !is_struct(&i) {
-                return smallvec![i];
+                return SmallVec::new([i]);
             }
             target_def_id = Some(cx.node_def_id(i.id));
 
-            smallvec![i.map(|i| {
+            SmallVec::new([i.map(|i| {
                 Item {
                     ident: new_ident,
                     .. i
                 }
-            })]
+            })])
         });
 
         // Find uses of the struct and rewrite them.  We need to check everywhere a Path may

@@ -5,8 +5,8 @@ use crate::diagnostics::TranslationError;
 use c2rust_ast_builder::mk;
 use std::collections::{HashMap, HashSet};
 use std::ops::Index;
-use syntax::ast::*;
-use syntax::ptr::P;
+use rustc_ast::ast::*;
+use rustc_ast::ptr::P;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 enum FieldKey {
@@ -254,7 +254,7 @@ impl TypeConverter {
             inputs.push(mk().arg(mk().cvar_args_ty(), mk().wild_pat()))
         };
 
-        let fn_ty = mk().fn_decl(inputs, FunctionRetTy::Ty(output));
+        let fn_ty = mk().fn_decl(inputs, FnRetTy::Ty(output));
         return Ok(mk().unsafe_().extern_("C").barefn_ty(fn_ty));
     }
 
@@ -264,9 +264,9 @@ impl TypeConverter {
         qtype: CQualTypeId,
     ) -> Result<P<Ty>, TranslationError> {
         let mutbl = if qtype.qualifiers.is_const {
-            Mutability::Immutable
+            Mutability::Not
         } else {
-            Mutability::Mutable
+            Mutability::Mut
         };
 
         match ctxt.resolve_type(qtype.ctype).kind {

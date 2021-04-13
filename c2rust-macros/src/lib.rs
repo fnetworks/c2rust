@@ -9,11 +9,13 @@ use quote::quote;
 use syn::parse_macro_input;
 use syn::visit::Visit;
 use syn::{Block, FnArg, Ident, Pat, TraitItemMethod, Type, TypeReference};
+use std::collections::HashSet;
 
 #[derive(Default)]
 struct VisitorImpls {
     tokens: TokenStream,
     count: usize,
+    seen: HashSet<Type>,
 }
 
 impl VisitorImpls {
@@ -35,13 +37,14 @@ impl VisitorImpls {
         let folder_name = format!("Folder{}", self.count);
         let folder_ident = Ident::new(&folder_name, Span::call_site());
 
+        // TODO
         if !walk.stmts.is_empty() {
             let noop_fn_name = format!("noop_{}", method_name);
             let noop_fn = Ident::new(&noop_fn_name, Span::call_site());
             self.tokens.extend(quote! {
                 impl WalkAst for #ty {
                     fn walk<T: MutVisitor>(&mut self, v: &mut T) {
-                        syntax::mut_visit::#noop_fn(self, v);
+                        rustc_ast::mut_visit::#noop_fn(self, v);
                     }
                 }
             });
@@ -61,17 +64,21 @@ impl VisitorImpls {
                     (self.callback)(#arg_pat)
                 }
             }
-
-            impl MutVisitNodes for #ty {
-                fn visit<T, F>(target: &mut T, callback: F)
-                    where T: MutVisit,
-                          F: FnMut(&mut Self)
-                {
-                    let mut f = #folder_ident { callback };
-                    target.visit(&mut f)
-                }
-            }
         });
+
+        if !self.seen.contains(ty) {
+            self.tokens.extend(quote! {
+                impl MutVisitNodes for #ty {
+                    fn visit<T, F>(target: &mut T, callback: F)
+                        where T: MutVisit,
+                              F: FnMut(&mut Self)
+                    {
+                        let mut f = #folder_ident { callback };
+                        target.visit(&mut f)
+                    }
+                }
+            });
+        }
 
         self.count += 1;
     }
@@ -105,7 +112,7 @@ impl VisitorImpls {
             self.tokens.extend(quote! {
                 impl WalkAst for #ty {
                     fn walk<T: MutVisitor>(&mut self, v: &mut T) {
-                        *self = syntax::mut_visit::#noop_fn(self.clone(), v).lone();
+                        *self = rustc_ast::mut_visit::#noop_fn(self.clone(), v).lone();
                     }
                 }
             })
@@ -126,25 +133,29 @@ impl VisitorImpls {
                     v
                 }
             }
-
-            impl FlatMapNodes for #ty {
-                fn visit<T, F>(target: &mut T, callback: F)
-                    where T: MutVisit,
-                          F: FnMut(#ty) -> SmallVec<[#ty; 1]>
-                {
-                    let mut f = #folder_ident { callback };
-                    target.visit(&mut f)
-                }
-
-                fn flat_map<T, F>(target: T, callback: F) -> SmallVec<[T; 1]>
-                    where T: MutVisit,
-                          F: FnMut(#ty) -> SmallVec<[#ty; 1]>
-                {
-                    let mut f = #folder_ident { callback };
-                    target.flat_map(&mut f)
-                }
-            }
         });
+
+        if !self.seen.contains(ty) {
+            self.tokens.extend(quote! {
+                impl FlatMapNodes for #ty {
+                    fn visit<T, F>(target: &mut T, callback: F)
+                        where T: MutVisit,
+                              F: FnMut(#ty) -> SmallVec<[#ty; 1]>
+                    {
+                        let mut f = #folder_ident { callback };
+                        target.visit(&mut f)
+                    }
+
+                    fn flat_map<T, F>(target: T, callback: F) -> SmallVec<[T; 1]>
+                        where T: MutVisit,
+                              F: FnMut(#ty) -> SmallVec<[#ty; 1]>
+                    {
+                        let mut f = #folder_ident { callback };
+                        target.flat_map(&mut f)
+                    }
+                }
+            });
+        }
 
         self.count += 1;
     }
@@ -155,14 +166,22 @@ impl<'ast> Visit<'ast> for VisitorImpls {
         let method_name = &m.sig.ident;
         let method_noop = m.default.as_ref().unwrap();
         match &m.sig.inputs[1] {
-            FnArg::Typed(pat_ty) => match &*pat_ty.ty {
-                Type::Reference(TypeReference {
-                    mutability: Some(_),
-                    elem,
-                    ..
-                }) => self.generate_visit(method_name, &pat_ty.pat, &elem, method_noop),
+            FnArg::Typed(pat_ty) => {
+                match &*pat_ty.ty {
+                    Type::Reference(TypeReference {
+                        mutability: Some(_),
+                        elem,
+                        ..
+                    }) => {
+                        self.generate_visit(method_name, &pat_ty.pat, &elem, method_noop);
+                        self.seen.insert((**elem).clone());
+                    }
 
-                ty => self.generate_flat_map(method_name, &pat_ty.pat, &ty, method_noop),
+                    ty => {
+                        self.generate_flat_map(method_name, &pat_ty.pat, &ty, method_noop);
+                        self.seen.insert((*ty).clone());
+                    }
+                };
             },
 
             _ => {}

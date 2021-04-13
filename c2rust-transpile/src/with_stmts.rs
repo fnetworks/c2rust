@@ -1,7 +1,7 @@
 use c2rust_ast_builder::mk;
 use std::iter::FromIterator;
-use syntax::ast::{Block, Expr, Stmt};
-use syntax::ptr::P;
+use rustc_ast::ast::{Block, Expr, Stmt};
+use rustc_ast::ptr::P;
 
 #[derive(Clone, Debug)]
 pub struct WithStmts<T> {

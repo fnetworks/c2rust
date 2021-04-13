@@ -1,8 +1,8 @@
 //! Crate-local helpers from libsyntax needed for the pretty-printer
 
-use syntax::ast::{Lit, LitKind, StrLit, StrStyle};
-use syntax::token;
-use syntax::util::parser::{AssocOp};
+use rustc_ast::ast::{Lit, LitKind, StrLit, StrStyle};
+use rustc_ast::token;
+use rustc_ast::util::parser::AssocOp;
 
 // From libsyntax/src/util/parser.rs
 

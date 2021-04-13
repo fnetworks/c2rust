@@ -15,10 +15,11 @@
 //! processed during macro expansion, which includes regular macros, proc macros (`format!`, etc.),
 //! certain attributes (`#[derive]`, `#[cfg]`), and `std`/prelude injection.
 use std::collections::HashMap;
-use syntax::ast::*;
-use syntax::attr;
-use syntax::source_map::Span;
-use syntax_pos::sym;
+use rustc_ast::ast::*;
+use rustc_ast::attr;
+use rustc_span::source_map::Span;
+use rustc_span::sym;
+use rustc_session::Session;
 
 mod cfg_attr;
 mod deleted;
@@ -50,9 +51,10 @@ impl<'ast> CollapseInfo<'ast> {
         expanded: &'ast Crate,
         node_map: &mut NodeMap,
         cs: &CommandState,
+        sess: &Session,
     ) -> Self {
         // Collect info + update node_map, then transfer and commit
-        let (mac_table, matched_ids) = collect_macro_invocations(unexpanded, expanded);
+        let (mac_table, matched_ids) = collect_macro_invocations(unexpanded, expanded, sess);
         node_map.add_edges(&matched_ids);
         node_map.add_edges(&[(CRATE_NODE_ID, CRATE_NODE_ID)]);
         let cfg_attr_info = collect_cfg_attrs(&unexpanded);
@@ -71,10 +73,10 @@ impl<'ast> CollapseInfo<'ast> {
     }
 
     #[cfg_attr(feature = "profile", flame)]
-    pub fn collapse(self, node_map: &mut NodeMap, cs: &CommandState) {
+    pub fn collapse(self, node_map: &mut NodeMap, cs: &CommandState, sess: &Session) {
         // Collapse macros + update node_map.  The cfg_attr step requires the updated node_map
         // TODO: we should be able to skip some of these steps if `!cmd_state.krate_changed()`
-        collapse_injected(&mut cs.krate_mut());
+        collapse_injected(&mut cs.krate_mut(), sess);
         let matched_ids = collapse_macros(&mut cs.krate_mut(), &self.mac_table);
         node_map.add_edges(&matched_ids);
         node_map.add_edges(&[(CRATE_NODE_ID, CRATE_NODE_ID)]);
@@ -96,12 +98,12 @@ impl<'ast> CollapseInfo<'ast> {
 
 /// Returns a list of injected crate names, plus a flag indicating whether a prelude import was
 /// also injected.
-fn injected_items(krate: &Crate) -> (&'static [&'static str], bool) {
-    // Mirrors the logic in syntax::std_inject
-    if attr::contains_name(&krate.attrs, sym::no_core) {
+fn injected_items(krate: &Crate, sess: &Session) -> (&'static [&'static str], bool) {
+    // Mirrors the logic in rustc_ast::std_inject
+    if sess.contains_name(&krate.attrs, sym::no_core) {
         (&[], false)
-    } else if attr::contains_name(&krate.attrs, sym::no_std) {
-        if attr::contains_name(&krate.attrs, sym::compiler_builtins) {
+    } else if sess.contains_name(&krate.attrs, sym::no_std) {
+        if sess.contains_name(&krate.attrs, sym::compiler_builtins) {
             (&["core"], true)
         } else {
             (&["core", "compiler_builtins"], true)
@@ -112,8 +114,8 @@ fn injected_items(krate: &Crate) -> (&'static [&'static str], bool) {
 }
 
 /// Reverse the effect of `std`/prelude injection, by deleting the injected items.
-pub fn collapse_injected(krate: &mut Crate) {
-    let (crate_names, mut expect_prelude) = injected_items(krate);
+pub fn collapse_injected(krate: &mut Crate, sess: &Session) {
+    let (crate_names, mut expect_prelude) = injected_items(krate, sess);
     let mut crate_names = crate_names.to_vec();
 
     krate.module.items.retain(|i| {
@@ -128,7 +130,7 @@ pub fn collapse_injected(krate: &mut Crate) {
                 }
             }
             ItemKind::Use(_) => {
-                if expect_prelude && attr::contains_name(&i.attrs, sym::prelude_import) {
+                if expect_prelude && sess.contains_name(&i.attrs, sym::prelude_import) {
                     expect_prelude = false;
                     false
                 } else {

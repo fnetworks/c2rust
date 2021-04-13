@@ -1,12 +1,12 @@
 //! This module implements commands for manipulating the current set of marked nodes.
-use rustc::hir;
-use rustc::hir::def::{DefKind, Res};
-use rustc::ty::TyKind;
+use rustc_hir as hir;
+use rustc_hir::def::{DefKind, Res};
+use rustc_middle::ty::TyKind;
 use std::str::FromStr;
-use syntax::ast;
-use syntax::ast::*;
-use syntax::symbol::Symbol;
-use syntax::visit::{self, Visitor};
+use rustc_ast::ast;
+use rustc_ast::ast::*;
+use rustc_span::symbol::Symbol;
+use rustc_ast::visit::{self, Visitor};
 
 use crate::ast_manip::{visit_nodes, Visit};
 use crate::command::CommandState;
@@ -33,7 +33,7 @@ impl<'a, 'tcx> MarkUseVisitor<'a, 'tcx> {
                         }
 
                         // For struct and node constructors, also check the parent item
-                        if matches!([path.res] Res::Def(DefKind::Ctor(..), _)) {
+                        if cmatches!([path.res] Res::Def(DefKind::Ctor(..), _)) {
                             let hir_id = self.cx.hir_map().node_to_hir_id(id);
                             let parent_id = self.cx.hir_map().get_parent_item(hir_id);
                             let parent_id = self.cx.hir_map().hir_to_node_id(parent_id);

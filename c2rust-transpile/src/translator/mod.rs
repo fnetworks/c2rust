@@ -12,17 +12,19 @@ use failure::{err_msg, Fail};
 use indexmap::{IndexMap, IndexSet};
 
 use rustc_parse::parse_stream_from_source_str;
-use syntax::attr;
-use syntax::ast::*;
-use syntax::util::comments::CommentStyle;
-use syntax::token::{self, DelimToken, Nonterminal};
-use syntax::ptr::*;
-use syntax::sess::ParseSess;
-use syntax::source_map::{FilePathMapping, SourceMap};
-use syntax::tokenstream::{TokenStream, TokenTree};
-use syntax::{ast, with_globals};
-use syntax_pos::{FileName, Span, DUMMY_SP};
-use syntax_pos::edition::Edition;
+use rustc_ast::attr;
+use rustc_ast::ast::*;
+use rustc_ast::util::comments::CommentStyle;
+use rustc_ast::token::{self, DelimToken, Nonterminal};
+use rustc_ast::ptr::*;
+use rustc_session::parse::ParseSess;
+use rustc_span::source_map::{FilePathMapping, SourceMap};
+use rustc_span::symbol::Ident;
+use rustc_ast::tokenstream::{TokenStream, TokenTree};
+use rustc_ast::ast;
+use rustc_span::with_session_globals;
+use rustc_span::{FileName, Span, DUMMY_SP};
+use rustc_span::edition::Edition;
 
 use crate::rust_ast::pos_to_span;
 use crate::rust_ast::comment_store::CommentStore;
@@ -518,8 +520,8 @@ pub fn translate(
         expanding_macro: None,
     };
 
-    // `with_globals` sets up a thread-local variable required by the syntax crate.
-    with_globals(Edition::Edition2018, || {
+    // `with_session_globals` sets up a thread-local variable required by the rustc_ast crate.
+    with_session_globals(Edition::Edition2018, || {
         t.use_crate(ExternCrate::Libc);
 
         // Sort the top-level declarations by file and source location so that we
@@ -610,8 +612,8 @@ pub fn translate(
         // Helper function that returns true if there is either a matching typedef or its
         // corresponding struct/union/enum
         fn contains(prenamed_decls: &IndexMap<CDeclId, CDeclId>, decl_id: &CDeclId) -> bool {
-            (prenamed_decls.contains_key(decl_id)
-                || prenamed_decls.values().find(|id| *id == decl_id).is_some())
+            prenamed_decls.contains_key(decl_id)
+                || prenamed_decls.values().find(|id| *id == decl_id).is_some()
         }
 
         // Populate renamer with top-level names
@@ -837,9 +839,9 @@ pub fn translate(
             .into_iter()
             .map(|p_i| p_i.map(|i| traverser.traverse_item(i)))
             .collect();
-        let foreign_items: Vec<ForeignItem> = foreign_items
+        let foreign_items: Vec<P<ForeignItem>> = foreign_items
             .into_iter()
-            .map(|fi| traverser.traverse_foreign_item(fi))
+            .map(|p_fi| p_fi.map(|fi| traverser.traverse_foreign_item(fi)))
             .collect();
         let items: Vec<P<Item>> = items
             .into_iter()
@@ -913,7 +915,7 @@ fn make_submodule(
         let ident_name = item.ident.name.as_str();
         let use_path = vec!["self".into(), mod_name.clone()];
 
-        let vis = match item.vis.node {
+        let vis = match item.vis.kind {
             VisibilityKind::Public => mk().pub_(),
             _ => mk(),
         };
@@ -1408,7 +1410,7 @@ impl<'c> Translation<'c> {
             .renamer
             .borrow_mut()
             .pick_name("run_static_initializers");
-        let fn_ty = FunctionRetTy::Default(DUMMY_SP);
+        let fn_ty = FnRetTy::Default(DUMMY_SP);
         let fn_decl = mk().fn_decl(vec![], fn_ty);
         let fn_block = mk().block(sectioned_static_initializers);
         let fn_attributes = self.mk_cross_check(mk(), vec!["none"]);
@@ -2094,7 +2096,7 @@ impl<'c> Translation<'c> {
                 } else {
                     // extern function declarations don't support/require mut patterns
                     let mutbl = if body.is_none() {
-                        Mutability::Immutable
+                        Mutability::Not
                     } else {
                         mutbl
                     };
@@ -2120,7 +2122,7 @@ impl<'c> Translation<'c> {
                     let arg_va_list_name = self.register_va_decls(body_id);
 
                     // FIXME: detect mutability requirements.
-                    let pat = mk().set_mutbl(Mutability::Mutable).ident_pat(arg_va_list_name);
+                    let pat = mk().set_mutbl(Mutability::Mut).ident_pat(arg_va_list_name);
                     args.push(mk().arg(mk().cvar_args_ty(), pat));
                 } else {  // function declarations
                     args.push(mk().arg(mk().cvar_args_ty(), mk().wild_pat()));
@@ -2139,9 +2141,9 @@ impl<'c> Translation<'c> {
             // If a return type is void, we should instead omit the unit type return,
             // -> (), to be more idiomatic
             let ret = if is_void_ret {
-                FunctionRetTy::Default(DUMMY_SP)
+                FnRetTy::Default(DUMMY_SP)
             } else {
-                FunctionRetTy::Ty(ret)
+                FnRetTy::Ty(ret)
             };
 
             let decl = mk().fn_decl(args, ret);
@@ -2630,7 +2632,7 @@ impl<'c> Translation<'c> {
                 } else {
                     let items = match self.convert_decl(ctx, decl_id)? {
                         ConvertedDecl::Item(item) => vec![item],
-                        ConvertedDecl::ForeignItem(item) => vec![mk().extern_("C").foreign_items(vec![item])],
+                        ConvertedDecl::ForeignItem(item) => vec![mk().extern_("C").foreign_items(vec![P(item)])],
                         ConvertedDecl::Items(items) => items,
                         ConvertedDecl::NoItem => return Ok(cfg::DeclStmtInfo::empty()),
                     };
@@ -2769,9 +2771,9 @@ impl<'c> Translation<'c> {
         };
 
         let mutbl = if typ.qualifiers.is_const {
-            Mutability::Immutable
+            Mutability::Not
         } else {
-            Mutability::Mutable
+            Mutability::Mut
         };
 
         Ok((ty, mutbl, init))
@@ -3547,8 +3549,8 @@ impl<'c> Translation<'c> {
                         let callee = self.convert_expr(ctx.used(), func)?;
                         let make_fn_ty = |ret_ty: P<Ty>| {
                             let ret_ty = match ret_ty.kind {
-                                TyKind::Tup(ref v) if v.is_empty() => FunctionRetTy::Default(DUMMY_SP),
-                                _ => FunctionRetTy::Ty(ret_ty),
+                                TyKind::Tup(ref v) if v.is_empty() => FnRetTy::Default(DUMMY_SP),
+                                _ => FnRetTy::Ty(ret_ty),
                             };
                             mk().barefn_ty(
                                 mk().fn_decl(
@@ -3732,7 +3734,7 @@ impl<'c> Translation<'c> {
             }
 
             ConstIntExpr::I(n) => mk().unary_expr(
-                syntax::ast::UnOp::Neg,
+                rustc_ast::ast::UnOp::Neg,
                 mk().lit_expr(mk().int_lit((-n) as u128, LitIntType::Unsuffixed)),
             ),
         };
@@ -4272,7 +4274,7 @@ impl<'c> Translation<'c> {
         // Extract the IDs of the `EnumConstant` decls underlying the enum.
         let variants = match self.ast_context.index(enum_decl).kind {
             CDeclKind::Enum { ref variants, .. } => variants,
-            _ => panic!("{:?} does not point to an `enum` declaration"),
+            _ => panic!("{:?} does not point to an `enum` declaration", enum_decl),
         };
 
         match self.ast_context.index(expr).kind {
@@ -4282,10 +4284,10 @@ impl<'c> Translation<'c> {
             CExprKind::DeclRef(_, decl_id, _) if variants.contains(&decl_id) => {
                 return val.map(|x| match x.kind {
                     ast::ExprKind::Cast(ref e, _) => e.clone(),
-                    _ => panic!(format!(
+                    _ => panic!(
                         "DeclRef {:?} of enum {:?} is not cast",
                         expr, enum_decl
-                    )),
+                    ),
                 })
             }
 

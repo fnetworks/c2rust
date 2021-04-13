@@ -1,7 +1,8 @@
 use c2rust_ast_builder::{mk, Builder};
 use indexmap::{IndexMap, IndexSet};
-use syntax::ast::{ForeignItem, Ident, Item};
-use syntax::ptr::P;
+use rustc_ast::ast::{ForeignItem, Item};
+use rustc_span::symbol::Ident;
+use rustc_ast::ptr::P;
 
 use std::borrow::Cow;
 use std::mem::swap;
@@ -71,7 +72,7 @@ impl PathedMultiImports {
 #[derive(Debug)]
 pub struct ItemStore {
     items: Vec<P<Item>>,
-    foreign_items: Vec<ForeignItem>,
+    foreign_items: Vec<P<ForeignItem>>,
     uses: PathedMultiImports,
 }
 
@@ -89,7 +90,7 @@ impl ItemStore {
     }
 
     pub fn add_foreign_item(&mut self, item: ForeignItem) {
-        self.foreign_items.push(item);
+        self.foreign_items.push(P(item));
     }
 
     pub fn add_use(&mut self, path: Vec<String>, ident: &str) {
@@ -100,7 +101,7 @@ impl ItemStore {
         self.uses.get_mut(path).insert_with_attr(ident, attrs)
     }
 
-    pub fn drain(&mut self) -> (Vec<P<Item>>, Vec<ForeignItem>, PathedMultiImports) {
+    pub fn drain(&mut self) -> (Vec<P<Item>>, Vec<P<ForeignItem>>, PathedMultiImports) {
         let mut items = Vec::new();
         let mut foreign_items = Vec::new();
         let mut uses = PathedMultiImports::new();

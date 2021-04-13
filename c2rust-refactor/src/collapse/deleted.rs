@@ -4,10 +4,10 @@ use smallvec::SmallVec;
 /// info later to re-insert those nodes during macro collapsing.
 use std::collections::{HashMap, HashSet};
 use std::mem;
-use syntax::ast::*;
-use syntax::mut_visit::{self, MutVisitor};
-use syntax::ptr::P;
-use syntax::visit::{self, Visitor};
+use rustc_ast::ast::*;
+use rustc_ast::mut_visit::{self, MutVisitor};
+use rustc_ast::ptr::P;
+use rustc_ast::visit::{self, Visitor};
 
 use crate::ast_manip::number_nodes::{number_nodes_with, NodeIdCounter};
 use crate::ast_manip::{GetNodeId, ListNodeIds, MutVisit, Visit};
@@ -104,7 +104,7 @@ impl<'a, 'ast> Visitor<'ast> for CollectDeletedNodes<'a, 'ast> {
         visit::walk_block(self, block);
     }
 
-    fn visit_mac(&mut self, mac: &'ast Mac) {
+    fn visit_mac_call(&mut self, mac: &'ast Mac) {
         visit::walk_mac(self, mac)
     }
 }
@@ -262,8 +262,8 @@ impl<'a, 'ast> MutVisitor for RestoreDeletedNodes<'a, 'ast> {
         mut_visit::noop_visit_block(block, self)
     }
 
-    fn visit_mac(&mut self, mac: &mut Mac) {
-        mut_visit::noop_visit_mac(mac, self)
+    fn visit_mac_call(&mut self, mac: &mut Mac) {
+        mut_visit::noop_visit_mac_call(mac, self)
     }
 }
 

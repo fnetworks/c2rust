@@ -8,10 +8,10 @@
 
 use smallvec::SmallVec;
 use std::mem;
-use syntax::ast::*;
-use syntax::mut_visit::{self, MutVisitor};
-use syntax::ptr::P;
-use syntax::source_map::{Span, DUMMY_SP};
+use rustc_ast::ast::*;
+use rustc_ast::mut_visit::{self, MutVisitor};
+use rustc_ast::ptr::P;
+use rustc_span::source_map::{Span, DUMMY_SP};
 
 use crate::ast_manip::util::extend_span_attrs;
 use crate::ast_manip::MutVisit;
@@ -110,7 +110,7 @@ impl MutVisitor for FixFormat {
     fn visit_expr(&mut self, e: &mut P<Expr>) {
         if !e.span.from_expansion()
             && self.ctxt.in_match
-            && matches!([e.kind] ExprKind::AddrOf(..))
+            && cmatches!([e.kind] ExprKind::AddrOf(..))
         {
             trace!("EXITING format! at {:?}", e);
             // Current node is the `&foo`.  We need to change its span.  On
@@ -133,7 +133,7 @@ impl MutVisitor for FixFormat {
                 mut_visit::noop_visit_expr(e, this);
                 e.span = mac_span;
             })
-        } else if self.ctxt.in_format && matches!([e.kind] ExprKind::Match(..)) {
+        } else if self.ctxt.in_format && cmatches!([e.kind] ExprKind::Match(..)) {
             let new_ctxt = self.ctxt.enter_match(e.span);
             self.descend(new_ctxt, |this| mut_visit::noop_visit_expr(e, this))
         } else if !self.ctxt.in_format && self.is_format_entry(&e) {
@@ -146,8 +146,8 @@ impl MutVisitor for FixFormat {
         }
     }
 
-    fn visit_mac(&mut self, mac: &mut Mac) {
-        mut_visit::noop_visit_mac(mac, self)
+    fn visit_mac_call(&mut self, mac: &mut Mac) {
+        mut_visit::noop_visit_mac_call(mac, self)
     }
 }
 
@@ -182,8 +182,8 @@ impl MutVisitor for FixAttrs {
         mut_visit::noop_flat_map_foreign_item(fi, self)
     }
 
-    fn visit_mac(&mut self, mac: &mut Mac) {
-        mut_visit::noop_visit_mac(mac, self)
+    fn visit_mac_call(&mut self, mac: &mut Mac) {
+        mut_visit::noop_visit_mac_call(mac, self)
     }
 }
 

@@ -4,7 +4,8 @@
 //! Rust.
 
 use super::*;
-use syntax::token::{self, TokenKind};
+use rustc_span::symbol::Ident;
+use rustc_ast::token::{self, TokenKind};
 
 impl<'c> Translation<'c> {
     pub fn convert_main(&self, main_id: CDeclId) -> Result<P<Item>, TranslationError> {
@@ -25,7 +26,7 @@ impl<'c> Translation<'c> {
                 ))?,
             };
 
-            let decl = mk().fn_decl(vec![], FunctionRetTy::Default(DUMMY_SP));
+            let decl = mk().fn_decl(vec![], FnRetTy::Default(DUMMY_SP));
 
             let main_fn_name = self
                 .renamer

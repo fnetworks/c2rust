@@ -1,11 +1,10 @@
 use std::collections::HashMap;
-use rustc::hir::def_id::DefId;
-use syntax::ast::*;
-use syntax::attr;
-use syntax::ptr::P;
-use syntax::symbol::Symbol;
-use syntax_pos::sym;
-use smallvec::smallvec;
+use rustc_hir::def_id::DefId;
+use rustc_ast::ast::*;
+use rustc_ast::attr;
+use rustc_ast::ptr::P;
+use rustc_span::symbol::Symbol;
+use rustc_span::sym;
 
 use crate::ast_manip::{FlatMapNodes, MutVisitNodes, visit_nodes};
 use crate::ast_manip::fn_edit::{visit_fns, FnKind};

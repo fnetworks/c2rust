@@ -1,15 +1,15 @@
 use rlua::UserData;
 use rlua::prelude::{LuaContext, LuaError, LuaResult, LuaTable};
-use syntax::ast::{
-    Arm, BindingMode, Block, CaptureBy, Crate, Expr, ExprKind, Extern, FunctionRetTy, FnDecl,
-    FloatTy, ImplItem, ImplItemKind, InlineAsmOutput, Item, ItemKind, LitFloatType, LitKind, Local, Mod,
-    Movability, Mutability::*, Param, Pat, PatKind, RangeLimits, Stmt, StmtKind, LitIntType, Ty,
-    TyKind, Unsafety, BareFnTy, UnsafeSource, BlockCheckMode, Path, Field, PathSegment, GenericArgs,
-    GenericArg, AsmDialect, Constness, UseTree, UseTreeKind,
+use rustc_ast::ast::{
+    Arm, BindingMode, Block, CaptureBy, Crate, Expr, ExprKind, Extern, FnRetTy, FnDecl, FloatTy,
+    AssocItem, AssocItemKind, LlvmInlineAsmOutput, Item, ItemKind, LitFloatType, LitKind, Local,
+    ModKind, Movability, Mutability, Param, Pat, PatKind, RangeLimits, Stmt, StmtKind, LitIntType,
+    Ty, TyKind, Unsafe, BareFnTy, UnsafeSource, BlockCheckMode, Path, ExprField, PathSegment,
+    GenericArgs, GenericArg, LlvmAsmDialect, Const, UseTree, UseTreeKind,
 };
-use syntax_pos::hygiene::SyntaxContext;
-use syntax::ptr::P;
-use syntax_pos::SpanData;
+use rustc_span::hygiene::SyntaxContext;
+use rustc_ast::ptr::P;
+use rustc_span::SpanData;
 
 use crate::ast_manip::fn_edit::{FnKind, FnLike};
 use crate::scripting::TransformCtxt;
@@ -224,10 +224,10 @@ impl<'lua> IntoLuaAst<'lua> for P<Expr> {
                         .expect("Self param on method");
 
                     ast.set("caller_is", match self_ty.kind {
-                        rustc::ty::TyKind::Ref(_, _, mutability) => {
+                        rustc_middle::ty::TyKind::Ref(_, _, mutability) => {
                             match mutability {
-                                rustc::hir::Mutability::Mutable => "ref_mut",
-                                rustc::hir::Mutability::Immutable => "ref",
+                                rustc_hir::Mutability::Mut => "ref_mut",
+                                rustc_hir::Mutability::Not => "ref",
                             }
                         },
                         _ => "owned",
@@ -250,7 +250,7 @@ impl<'lua> IntoLuaAst<'lua> for P<Expr> {
                 },
                 ExprKind::Unary(op, expr) => {
                     ast.set("kind", "Unary")?;
-                    ast.set("op", syntax::ast::UnOp::to_string(op))?;
+                    ast.set("op", rustc_ast::ast::UnOp::to_string(op))?;
                     ast.set("expr", expr.into_lua_ast(ctx, lua_ctx)?)?;
                 },
                 ExprKind::Cast(expr, ty) => {
@@ -391,8 +391,8 @@ impl<'lua> IntoLuaAst<'lua> for P<Expr> {
                     ast.set("kind", "AddrOf")?;
                     ast.set("expr", expr.into_lua_ast(ctx, lua_ctx)?)?;
                     ast.set("mutability", match mutability {
-                        Immutable => "Immutable",
-                        Mutable => "Mutable",
+                        Mutability::Not => "Immutable",
+                        Mutability::Yes => "Mutable",
                     })?;
                 },
                 ExprKind::Break(opt_label, opt_expr) => {
@@ -420,7 +420,7 @@ impl<'lua> IntoLuaAst<'lua> for P<Expr> {
                         ast.set("value", val.into_lua_ast(ctx, lua_ctx)?)?;
                     }
                 },
-                ExprKind::InlineAsm(inline_asm) => {
+                ExprKind::LlvmInlineAsm(inline_asm) => {
                     let inline_asm = inline_asm.into_inner();
                     let inputs: LuaResult<Vec<_>> = inline_asm.inputs
                         .into_iter()
@@ -443,7 +443,7 @@ impl<'lua> IntoLuaAst<'lua> for P<Expr> {
                         .map(|sym| sym.as_str().to_string())
                         .collect();
 
-                    ast.set("kind", "InlineAsm")?;
+                    ast.set("kind", "LlvmInlineAsm")?;
                     ast.set("asm", &*inline_asm.asm.as_str())?;
                     ast.set("inputs", lua_ctx.create_sequence_from(inputs?.into_iter())?)?;
                     ast.set("outputs", lua_ctx.create_sequence_from(outputs?.into_iter())?)?;
@@ -451,8 +451,8 @@ impl<'lua> IntoLuaAst<'lua> for P<Expr> {
                     ast.set("volatile", inline_asm.volatile)?;
                     ast.set("alignstack", inline_asm.alignstack)?;
                     ast.set("dialect", match inline_asm.dialect {
-                        AsmDialect::Att => "Att",
-                        AsmDialect::Intel => "Intel",
+                        LlvmAsmDialect::Att => "Att",
+                        LlvmAsmDialect::Intel => "Intel",
                     })?;
                 },
                 ExprKind::Mac(mac) => {
@@ -537,8 +537,8 @@ impl<'lua> IntoLuaAst<'lua> for P<FnDecl> {
 
         self.and_then(|fn_decl| {
             ast.set("return_type", match fn_decl.output {
-                FunctionRetTy::Default(_) => None,
-                FunctionRetTy::Ty(ty) => Some(ty.into_lua_ast(ctx, lua_ctx)?),
+                FnRetTy::Default(_) => None,
+                FnRetTy::Ty(ty) => Some(ty.into_lua_ast(ctx, lua_ctx)?),
             })?;
 
             let args: LuaResult<Vec<_>> = fn_decl.inputs
@@ -648,7 +648,7 @@ impl<'lua> IntoLuaAst<'lua> for Crate {
     }
 }
 
-impl<'lua> IntoLuaAst<'lua> for Mod {
+impl<'lua> IntoLuaAst<'lua> for ModKind {
     fn into_lua_ast(self, ctx: &TransformCtxt, lua_ctx: LuaContext<'lua>) -> LuaResult<LuaTable<'lua>> {
         let ast = lua_ctx.create_table()?;
         let items = self.items
@@ -696,12 +696,12 @@ impl<'lua> IntoLuaAst<'lua> for P<Item> {
                     ast.set("decl", sig.decl.into_lua_ast(ctx, lua_ctx)?)?;
                     ast.set("block", block.into_lua_ast(ctx, lua_ctx)?)?;
                     ast.set("unsafety", match sig.header.unsafety {
-                        Unsafety::Unsafe => "Unsafe",
-                        Unsafety::Normal => "Normal",
+                        Unsafe::Yes(_) => "Unsafe",
+                        Unsafe::No => "Normal",
                     })?;
                     ast.set("is_const", match sig.header.constness.node {
-                        Constness::Const => true,
-                        Constness::NotConst => false,
+                        Const::Yes(_) => true,
+                        Const::No => false,
                     })?;
                     ast.set("ext", match sig.header.ext {
                         Extern::None => None,
@@ -793,16 +793,16 @@ impl<'lua> IntoLuaAst<'lua> for P<Item> {
     }
 }
 
-impl<'lua> IntoLuaAst<'lua> for ImplItem {
+impl<'lua> IntoLuaAst<'lua> for AssocItem {
     fn into_lua_ast(self, ctx: &TransformCtxt, lua_ctx: LuaContext<'lua>) -> LuaResult<LuaTable<'lua>> {
         let ast = lua_ctx.create_table()?;
 
-        ast.set("type", "ImplItem")?;
+        ast.set("type", "AssocItem")?;
         ast.set("ident", &*self.ident.as_str())?;
         ast.set("span", LuaSpan(self.span.data()))?;
 
         match self.kind {
-            ImplItemKind::Method(sig, block) => {
+            AssocItemKind::Method(sig, block) => {
                 ast.set("kind", "ImplMethod")?;
                 ast.set("decl", sig.decl.into_lua_ast(ctx, lua_ctx)?)?;
                 ast.set("block", block.into_lua_ast(ctx, lua_ctx)?)?;
@@ -815,13 +815,13 @@ impl<'lua> IntoLuaAst<'lua> for ImplItem {
     }
 }
 
-impl<'lua> IntoLuaAst<'lua> for InlineAsmOutput {
+impl<'lua> IntoLuaAst<'lua> for LlvmInlineAsmOutput {
     fn into_lua_ast(self, ctx: &TransformCtxt, lua_ctx: LuaContext<'lua>) -> LuaResult<LuaTable<'lua>> {
         let ast = lua_ctx.create_table()?;
         let constraint = self.constraint.as_str().to_string();
         let expr = self.expr.into_lua_ast(ctx, lua_ctx)?;
 
-        ast.set("type", "InlineAsmOutput")?;
+        ast.set("type", "LlvmInlineAsmOutput")?;
         ast.set("constraint", constraint)?;
         ast.set("expr", expr)?;
         ast.set("is_indirect", self.is_indirect)?;
@@ -878,8 +878,8 @@ impl<'lua> IntoLuaAst<'lua> for P<Ty> {
 
                     ast.set("kind", "BareFn")?;
                     ast.set("unsafety", match unsafety {
-                        Unsafety::Unsafe => "Unsafe",
-                        Unsafety::Normal => "Normal",
+                        Unsafe::Yes(_) => "Unsafe",
+                        Unsafe::No => "Normal",
                     })?;
                     ast.set("ext", match ext {
                         Extern::None => None,
@@ -940,7 +940,7 @@ impl<'lua> IntoLuaAst<'lua> for P<Ty> {
     }
 }
 
-impl<'lua> IntoLuaAst<'lua> for Field {
+impl<'lua> IntoLuaAst<'lua> for ExprField {
     fn into_lua_ast(self, ctx: &TransformCtxt, lua_ctx: LuaContext<'lua>) -> LuaResult<LuaTable<'lua>> {
         let ast = lua_ctx.create_table()?;
 

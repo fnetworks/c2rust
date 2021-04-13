@@ -1,12 +1,11 @@
 //! Miscellaneous utility functions.
-use rustc::hir::def::{self, Namespace, Res};
+use rustc_hir::def::{self, Namespace, Res};
 use smallvec::SmallVec;
-use syntax::ast::*;
-use syntax::ptr::P;
-use syntax::source_map::{SourceMap, Span, DUMMY_SP};
-use syntax::symbol::{kw, Symbol};
-use syntax_pos::sym;
-use smallvec::smallvec;
+use rustc_ast::ast::*;
+use rustc_ast::ptr::P;
+use rustc_span::source_map::{SourceMap, Span, DUMMY_SP};
+use rustc_span::symbol::{kw, Symbol, Ident};
+use rustc_span::sym;
 
 use super::AstEquiv;
 
@@ -71,7 +70,7 @@ impl PatternSymbol for Stmt {
 impl PatternSymbol for Pat {
     fn pattern_symbol(&self) -> Option<Symbol> {
         match self.kind {
-            PatKind::Ident(BindingMode::ByValue(Mutability::Immutable), ref i, None) => {
+            PatKind::Ident(BindingMode::ByValue(Mutability::Not), ref i, None) => {
                 i.pattern_symbol()
             }
             _ => None,
@@ -88,7 +87,7 @@ impl PatternSymbol for Ty {
     }
 }
 
-impl PatternSymbol for Mac {
+impl PatternSymbol for MacCall {
     fn pattern_symbol(&self) -> Option<Symbol> {
         match &*self.args {
             MacArgs::Empty => self.path.pattern_symbol(),
@@ -106,19 +105,10 @@ impl PatternSymbol for Item {
     }
 }
 
-impl PatternSymbol for ImplItem {
+impl PatternSymbol for AssocItem {
     fn pattern_symbol(&self) -> Option<Symbol> {
         match self.kind {
-            ImplItemKind::Macro(ref m) => m.pattern_symbol(),
-            _ => None,
-        }
-    }
-}
-
-impl PatternSymbol for TraitItem {
-    fn pattern_symbol(&self) -> Option<Symbol> {
-        match self.kind {
-            TraitItemKind::Macro(ref m) => m.pattern_symbol(),
+            AssocItemKind::MacCall(ref m) => m.pattern_symbol(),
             _ => None,
         }
     }
@@ -162,7 +152,7 @@ pub fn extend_span_attrs(mut s: Span, attrs: &[Attribute]) -> Span {
 }
 
 /// Get the name of a macro invocation.
-pub fn macro_name(mac: &Mac) -> Name {
+pub fn macro_name(mac: &MacCall) -> Symbol {
     let p = &mac.path;
     p.segments.last().unwrap().ident.name
 }
@@ -211,7 +201,7 @@ pub fn split_uses(item: P<Item>) -> SmallVec<[P<Item>; 1]> {
     let use_tree = expect!([&item.kind] ItemKind::Use(u) => u)
         .clone()
         .into_inner();
-    let mut out = smallvec![];
+    let mut out = SmallVec::new();
     let initial_path = Path {
         span: use_tree.prefix.span,
         segments: vec![],
@@ -231,14 +221,14 @@ pub fn is_relative_path(path: &Path) -> bool {
 /// Return the namespace the given Def is defined in. Does not yet handle the
 /// macro namespace.
 pub fn namespace(res: &def::Res) -> Option<Namespace> {
-    use rustc::hir::def::DefKind::*;
+    use rustc_hir::def::DefKind::*;
     match res {
         Res::Def(kind, _) => match kind {
-            Mod | Struct | Union | Enum | Variant | Trait | OpaqueTy | TyAlias
-            | ForeignTy | TraitAlias | AssocTy | AssocOpaqueTy | TyParam => {
+            Mod | Struct | Union | Enum | Variant | Trait | TyAlias
+            | ForeignTy | TraitAlias | AssocTy | TyParam => {
                 Some(Namespace::TypeNS)
             }
-            Fn | Const | ConstParam | Static | Ctor(..) | Method | AssocConst => {
+            Fn | Const | ConstParam | Static | Ctor(..) | AssocFn | AssocConst => {
                 Some(Namespace::ValueNS)
             }
             Macro(..) => Some(Namespace::MacroNS),
@@ -256,8 +246,8 @@ pub fn namespace(res: &def::Res) -> Option<Namespace> {
 
 /// Select the wider of the two given visibilities
 pub fn join_visibility(vis1: &VisibilityKind, vis2: &VisibilityKind) -> VisibilityKind {
-    use syntax::ast::CrateSugar::PubCrate;
-    use syntax::ast::VisibilityKind::*;
+    use rustc_ast::ast::CrateSugar::PubCrate;
+    use rustc_ast::ast::VisibilityKind::*;
     match (vis1, vis2) {
         (Public, _) | (_, Public) => Public,
         (Crate(_), _) | (_, Crate(_)) => Crate(PubCrate),

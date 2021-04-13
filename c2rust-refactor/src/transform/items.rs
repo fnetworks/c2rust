@@ -1,13 +1,13 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use regex::Regex;
-use rustc::hir::HirId;
+use rustc_hir::HirId;
 use rustc_parse::parser::FollowedByType;
-use syntax::ast::*;
-use syntax::source_map::DUMMY_SP;
-use syntax::mut_visit::{self, MutVisitor};
-use syntax::ptr::P;
-use syntax::symbol::Symbol;
+use rustc_ast::ast::*;
+use rustc_span::source_map::DUMMY_SP;
+use rustc_ast::mut_visit::{self, MutVisitor};
+use rustc_ast::ptr::P;
+use rustc_span::symbol::Symbol;
 use smallvec::{smallvec, SmallVec};
 
 use c2rust_ast_builder::{mk, Make, IntoSymbol};
@@ -301,7 +301,7 @@ impl Transform for SetVisibility {
                 }
 
                 let was_in_trait_impl = self.in_trait_impl;
-                self.in_trait_impl = matches!([i.kind]
+                self.in_trait_impl = cmatches!([i.kind]
                         ItemKind::Impl(_, _, _, _, Some(_), _, _));
                 let r = mut_visit::noop_flat_map_item(i, self);
                 self.in_trait_impl = was_in_trait_impl;
@@ -562,8 +562,8 @@ impl Transform for CreateItem {
                 mut_visit::noop_visit_block(b, self)
             }
 
-            fn visit_mac(&mut self, mac: &mut Mac) {
-                mut_visit::noop_visit_mac(mac, self)
+            fn visit_mac_call(&mut self, mac: &mut Mac) {
+                mut_visit::noop_visit_mac_call(mac, self)
             }
         }
 

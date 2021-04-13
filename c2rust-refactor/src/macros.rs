@@ -28,8 +28,19 @@ macro_rules! unpack {
     };
 }
 
+// TODO deprecated - collides with rust's std::cmatches!(..)
 #[macro_export]
 macro_rules! matches {
+    ([$e:expr] $($pat:pat),*) => {
+        match $e {
+            $( $pat => true, )*
+            _ => false,
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! cmatches {
     ([$e:expr] $($pat:pat),*) => {
         match $e {
             $( $pat => true, )*

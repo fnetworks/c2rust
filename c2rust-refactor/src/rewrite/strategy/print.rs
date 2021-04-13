@@ -9,26 +9,26 @@
 //! pretty-printer output, since it likely has nicer formatting, comments, etc.  So there is some
 //! logic in this module for "recovering" from needing to use this strategy by splicing old AST
 //! text back into the new AST's pretty printer output.
-use rustc::session::Session;
+use rustc_session::Session;
 use rustc_data_structures::sync::Lrc;
 use rustc_target::spec::abi::Abi;
 use std::fmt::Debug;
 use std::fs;
 use std::path;
 use std::rc::Rc;
-use syntax::ast::*;
-use syntax::attr;
-use syntax_pos::hygiene::SyntaxContext;
-use syntax::util::comments::CommentStyle;
-use syntax::token::{BinOpToken, DelimToken, Nonterminal, Token, TokenKind};
-use syntax::token::{Lit as TokenLit, LitKind as TokenLitKind};
-use syntax::ptr::P;
-use syntax::source_map::{BytePos, FileName, SourceFile, Span, Spanned};
-use syntax::symbol::Symbol;
-use syntax::tokenstream::{DelimSpan, TokenStream, TokenTree};
-use syntax::util::parser;
-use syntax::ThinVec;
-use syntax_pos::DUMMY_SP;
+use rustc_ast::ast::*;
+use rustc_ast::attr;
+use rustc_span::hygiene::SyntaxContext;
+use rustc_ast::util::comments::CommentStyle;
+use rustc_ast::token::{BinOpToken, DelimToken, Nonterminal, Token, TokenKind};
+use rustc_ast::token::{Lit as TokenLit, LitKind as TokenLitKind};
+use rustc_ast::ptr::P;
+use rustc_span::source_map::{BytePos, FileName, SourceFile, Span, Spanned};
+use rustc_span::symbol::Symbol;
+use rustc_ast::tokenstream::{DelimSpan, TokenStream, TokenTree};
+use rustc_ast::util::parser;
+use rustc_data_structures::thin_vec::ThinVec;
+use rustc_span::DUMMY_SP;
 
 use c2rust_ast_printer::pprust::{self, PrintState};
 use crate::ast_manip::NodeTable;

@@ -1,19 +1,20 @@
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 
-use rustc::hir::def::{DefKind, Namespace, Res};
-use rustc::hir::def_id::{CRATE_DEF_INDEX, DefId};
-use rustc::hir::map as hir_map;
-use rustc::hir::{self, Node, HirId};
-use rustc::session::Session;
-use rustc::session::config::CrateType;
-use rustc::ty::subst::InternalSubsts;
-use rustc::ty::{FnSig, ParamEnv, PolyFnSig, Ty, TyCtxt, TyKind};
+use rustc_hir as hir;
+use rustc_hir::def::{DefKind, Namespace, Res};
+use rustc_hir::def_id::{CRATE_DEF_INDEX, DefId};
+use rustc_middle::hir::map as hir_map;
+use rustc_hir::{self, Node, HirId};
+use rustc_session::Session;
+use rustc_session::config::CrateType;
+use rustc_middle::ty::subst::InternalSubsts;
+use rustc_middle::ty::{FnSig, ParamEnv, PolyFnSig, Ty, TyCtxt, TyKind};
 use rustc_metadata::creader::CStore;
-use syntax::ast::{
-    self, Expr, ExprKind, ForeignItem, ForeignItemKind, FnDecl, FunctionRetTy, Item, ItemKind, NodeId, Path, QSelf, UseTreeKind, DUMMY_NODE_ID,
+use rustc_ast::ast::{
+    self, Expr, ExprKind, ForeignItem, ForeignItemKind, FnDecl, FnRetTy, Item, ItemKind, NodeId, Path, QSelf, UseTreeKind, DUMMY_NODE_ID,
 };
-use syntax::ptr::P;
+use rustc_ast::ptr::P;
 
 use crate::ast_manip::AstEquiv;
 use crate::command::{GenerationalTyCtxt, TyCtxtGeneration};
@@ -316,7 +317,7 @@ impl<'a, 'tcx> RefactorCtxt<'a, 'tcx> {
                 //
                 // We detect this case by the presence of a type-dependent def on the Call.
                 if let Some(Ok((kind, func_def_id))) = tables.type_dependent_defs().get(call_hir_id) {
-                    if !matches!([kind] DefKind::Fn, DefKind::Method) {
+                    if !cmatches!([kind] DefKind::Fn, DefKind::Method) {
                         warn!(
                             "overloaded call dispatches to non-fnlike def {:?}",
                             kind
@@ -346,7 +347,7 @@ impl<'a, 'tcx> RefactorCtxt<'a, 'tcx> {
                     // (3) Type-dependent function (`S::f()`).  Unlike the next case, these don't
                     // get fully resolved until typeck, so the results are recorded differently.
                     } else if let Some(Ok((kind, func_def_id))) = tables.type_dependent_defs().get(func_hir_id) {
-                        if !matches!([kind] DefKind::Fn, DefKind::Method) {
+                        if !cmatches!([kind] DefKind::Fn, DefKind::Method) {
                             warn!("type-dep call dispatches to non-fnlike def {:?}", kind);
                             return None;
                         }
@@ -372,7 +373,7 @@ impl<'a, 'tcx> RefactorCtxt<'a, 'tcx> {
                 // type_dependent_defs.
                 let hir_id = hir_map.node_to_hir_id(e.id);
                 if let Some(Ok((kind, func_def_id))) = tables.type_dependent_defs().get(hir_id) {
-                    if !matches!([kind] DefKind::Fn, DefKind::Method) {
+                    if !cmatches!([kind] DefKind::Fn, DefKind::Method) {
                         warn!("type-dep call dispatches to non-fnlike def {:?}", kind);
                         return None;
                     }
@@ -468,7 +469,7 @@ impl<'a, 'tcx> RefactorCtxt<'a, 'tcx> {
 
     /// Attempt to resolve a `Use` item id to the `hir::Path` of the imported
     /// item. The given item _must_ be a `Use`.
-    pub fn resolve_use_id(&self, id: NodeId) -> &hir::ptr::P<hir::Path> {
+    pub fn resolve_use_id(&self, id: NodeId) -> &P<hir::Path> {
         let hir_node = self
             .hir_map()
             .find(id)
@@ -480,7 +481,7 @@ impl<'a, 'tcx> RefactorCtxt<'a, 'tcx> {
 
     /// Attempt to resolve a `Use` item id to the `hir::Path` of the imported
     /// item. The given item _must_ be a `Use`.
-    pub fn try_resolve_use_id(&self, id: NodeId) -> Option<&hir::ptr::P<hir::Path>> {
+    pub fn try_resolve_use_id(&self, id: NodeId) -> Option<&P<hir::Path>> {
         let hir_node = self
             .hir_map()
             .find(id)?;
@@ -660,7 +661,7 @@ impl<'a, 'tcx, 'b> TypeCompare<'a, 'tcx, 'b> {
 
     /// Compare two items for type compatibility under the C definition
     pub fn compatible_types(&self, item1: &Item, item2: &Item) -> bool {
-        use syntax::ast::ItemKind::*;
+        use rustc_ast::ast::ItemKind::*;
         match (&item1.kind, &item2.kind) {
             // * Assure that these two items are in fact of the same type, just to be safe.
             (TyAlias(ty1, g1), TyAlias(ty2, g2)) => {
@@ -766,12 +767,12 @@ impl<'a, 'tcx, 'b> TypeCompare<'a, 'tcx, 'b> {
         // closures, so the default return type is ()
         let unit_ty = mk().tuple_ty::<P<ast::Ty>>(vec![]);
         let ty1 = match &decl1.output {
-            FunctionRetTy::Default(..) => &unit_ty,
-            FunctionRetTy::Ty(ty) => &ty,
+            FnRetTy::Default(..) => &unit_ty,
+            FnRetTy::Ty(ty) => &ty,
         };
         let ty2 = match &decl2.output {
-            FunctionRetTy::Default(..) => &unit_ty,
-            FunctionRetTy::Ty(ty) => &ty,
+            FnRetTy::Default(..) => &unit_ty,
+            FnRetTy::Ty(ty) => &ty,
         };
 
         self.structural_eq_ast_tys(ty1, ty2)

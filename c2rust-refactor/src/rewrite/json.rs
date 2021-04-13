@@ -1,9 +1,9 @@
 use json::{self, JsonValue};
 use std::collections::{HashMap, HashSet};
-use syntax::ast::*;
-use syntax::source_map::{SourceMap, Span};
-use syntax::symbol::Symbol;
-use syntax::visit::{self, FnKind, Visitor};
+use rustc_ast::ast::*;
+use rustc_span::source_map::{SourceMap, Span};
+use rustc_span::symbol::{Symbol, Ident};
+use rustc_ast::visit::{self, FnKind, Visitor};
 
 use crate::rewrite::{TextAdjust, TextRewrite};
 
@@ -114,14 +114,9 @@ impl<'a, 'ast> Visitor<'ast> for MarkVisitor<'a> {
         visit::walk_item(self, x);
     }
 
-    fn visit_impl_item(&mut self, x: &'ast ImplItem) {
-        self.encode_named("impl item", x.id, x.ident);
-        visit::walk_impl_item(self, x);
-    }
-
-    fn visit_trait_item(&mut self, x: &'ast TraitItem) {
-        self.encode_named("trait item", x.id, x.ident);
-        visit::walk_trait_item(self, x);
+    fn visit_assoc_item(&mut self, x: &'ast AssocItem) {
+        self.encode_named("assoc item", x.id, x.ident);
+        visit::walk_assoc_item(self, x);
     }
 
     fn visit_foreign_item(&mut self, x: &'ast ForeignItem) {
@@ -160,12 +155,12 @@ impl<'a, 'ast> Visitor<'ast> for MarkVisitor<'a> {
         visit::walk_fn(self, kind, fd, span);
     }
 
-    fn visit_struct_field(&mut self, x: &'ast StructField) {
+    fn visit_field_def(&mut self, x: &'ast FieldDef) {
         self.encode_inner("field", x.id, x.ident.map(|i| i.name));
-        visit::walk_struct_field(self, x);
+        visit::walk_field_def(self, x);
     }
 
-    fn visit_mac(&mut self, x: &'ast Mac) {
+    fn visit_mac_call(&mut self, x: &'ast MacCall) {
         visit::walk_mac(self, x);
     }
 }

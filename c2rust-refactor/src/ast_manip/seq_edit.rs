@@ -1,8 +1,8 @@
 //! Functions for rewriting sequences of stmts or items, using `Cursor<T>`.
 use std::mem;
-use syntax::ast::{Block, Item, Mod, Stmt};
-use syntax::mut_visit::{self, MutVisitor};
-use syntax::ptr::P;
+use rustc_ast::ast::{Block, Item, ItemKind, ModKind, Stmt};
+use rustc_ast::mut_visit::{self, MutVisitor};
+use rustc_ast::ptr::P;
 
 use crate::ast_manip::MutVisit;
 use crate::util::cursor::Cursor;
@@ -35,12 +35,18 @@ struct ModuleFolder<F: FnMut(&mut Cursor<P<Item>>)> {
 }
 
 impl<F: FnMut(&mut Cursor<P<Item>>)> MutVisitor for ModuleFolder<F> {
-    fn visit_mod(&mut self, mut m: &mut Mod) {
-        let items = mem::replace(&mut m.items, vec![]);
-        let mut curs = Cursor::from_vec(items);
-        (self.f)(&mut curs);
-        m.items = curs.into_vec();
-        mut_visit::noop_visit_mod(m, self)
+    fn visit_item_kind(&mut self, m: &mut ItemKind) {
+        match m {
+            ItemKind::Mod(_unsafety, mod_kind) => match mod_kind {
+                ModKind::Loaded(ref mut items, _inline, _inner_span) => {
+                    let items = mem::replace(items, vec![]);
+                    let mut curs = Cursor::from_vec(items);
+                    (self.f)(&mut curs);
+                    *items = curs.into_vec();
+                }
+            }
+        }
+        mut_visit::noop_visit_item_kind(m, self)
     }
 }
 

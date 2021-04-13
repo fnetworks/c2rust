@@ -1,15 +1,15 @@
 use regex::Regex;
-use rustc::session::Session;
+use rustc_session::Session;
 use std::mem;
 use std::str::FromStr;
 use std::vec;
-use syntax::ast::Path;
+use rustc_ast::ast::Path;
 use rustc_parse::parser::{Parser, PathStyle};
-use syntax::token::{DelimToken, Lit, LitKind, Token, TokenKind};
-use syntax::sess::ParseSess;
-use syntax::symbol::Symbol;
-use syntax::tokenstream::{TokenStream, TokenTree};
-use syntax_pos::FileName;
+use rustc_ast::token::{DelimToken, Lit, LitKind, Token, TokenKind};
+use rustc_session::parse::ParseSess;
+use rustc_span::symbol::Symbol;
+use rustc_ast::tokenstream::{TokenStream, TokenTree};
+use rustc_span::FileName;
 
 use crate::ast_manip::remove_paren;
 use crate::pick_node::NodeKind;

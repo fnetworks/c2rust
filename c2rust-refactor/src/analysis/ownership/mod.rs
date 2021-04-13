@@ -18,15 +18,16 @@ use std::collections::HashMap;
 use std::fmt;
 use std::u32;
 
-use arena::SyncDroplessArena;
+use rustc_arena::DroplessArena;
 use log::Level;
-use rustc::hir;
-use rustc::hir::def_id::{DefId, LOCAL_CRATE};
-use rustc::hir::{Mutability, Node};
-use rustc::ty::{TyCtxt, TyKind, TypeAndMut, TyS};
+use rustc_hir as hir;
+use rustc_hir::def_id::{DefId, LOCAL_CRATE};
+use rustc_hir::{Mutability, Node};
+use rustc_middle::hir::map;
+use rustc_middle::ty::{TyCtxt, TyKind, TypeAndMut, TyS};
 use rustc_index::vec::{Idx, IndexVec};
-use syntax::ast::IntTy;
-use syntax::source_map::Span;
+use rustc_ast::ast::IntTy;
+use rustc_span::source_map::Span;
 
 use crate::analysis::labeled_ty::{LabeledTy, LabeledTyCtxt};
 use crate::command::CommandState;
@@ -143,7 +144,7 @@ impl<'lty, 'tcx, L: fmt::Debug> type_map::Signature<LabeledTy<'lty, 'tcx, L>>
 
 /// Check if a definition is a `fn` item of some sort.  Note that this does not return true on
 /// closures.
-fn is_fn(hir_map: &hir::map::Map, def_id: DefId) -> bool {
+fn is_fn(hir_map: &map::Map, def_id: DefId) -> bool {
     let n = match hir_map.get_if_local(def_id) {
         None => return false,
         Some(n) => n,
@@ -215,10 +216,10 @@ fn analyze_externs<'a, 'tcx, 'lty>(cx: &mut Ctxt<'lty, 'tcx>, hir_map: &HirMap<'
         for &input in func_summ.sig.inputs {
             if let Some(p) = input.label {
                 match input.ty.kind {
-                    TyKind::Ref(_, _, Mutability::Mutable) => {
+                    TyKind::Ref(_, _, Mutability::Mut) => {
                         func_summ.sig_cset.add(Perm::Concrete(ConcretePerm::Move), Perm::var(p));
                     }
-                    TyKind::RawPtr(TypeAndMut{mutbl: Mutability::Mutable, ..}) => {
+                    TyKind::RawPtr(TypeAndMut{mutbl: Mutability::Mut, ..}) => {
                         func_summ.sig_cset.add(Perm::Concrete(ConcretePerm::Move), Perm::var(p));
                     }
                     _ => {}
@@ -239,7 +240,7 @@ fn analyze_inter<'lty, 'tcx>(cx: &mut Ctxt<'lty, 'tcx>) {
 
 fn is_mut_t(ty: &TyS) -> bool {
     if let TyKind::RawPtr(mut_ty) = ty.kind {
-        if mut_ty.mutbl == Mutability::Mutable {
+        if mut_ty.mutbl == Mutability::Mut {
             if let TyKind::Param(param_ty) = mut_ty.ty.kind {
                 return param_ty.name.as_str() == "T";
             }
@@ -282,7 +283,7 @@ fn register_std_constraints<'a, 'tcx, 'lty>(
 pub fn analyze<'lty, 'a: 'lty, 'tcx: 'a>(
     st: &CommandState,
     dcx: &RefactorCtxt<'a, 'tcx>,
-    arena: &'lty SyncDroplessArena,
+    arena: &'lty DroplessArena,
 ) -> AnalysisResult<'lty, 'tcx> {
     let mut cx = Ctxt::new(dcx.ty_ctxt(), arena);
 
@@ -336,7 +337,7 @@ pub struct AnalysisResult<'lty, 'tcx> {
     pub monos: HashMap<(DefId, usize), MonoResult>,
 
     /// Arena used to allocate all type wrappers
-    arena: &'lty SyncDroplessArena,
+    arena: &'lty DroplessArena,
 }
 
 /// Results specific to an analysis-level function.
@@ -427,7 +428,7 @@ impl<'lty, 'tcx> AnalysisResult<'lty, 'tcx> {
         (fr, vr)
     }
 
-    pub fn arena(&self) -> &'lty SyncDroplessArena {
+    pub fn arena(&self) -> &'lty DroplessArena {
         self.arena
     }
 }
@@ -608,7 +609,7 @@ impl<'lty, 'tcx> From<Ctxt<'lty, 'tcx>> for AnalysisResult<'lty, 'tcx> {
 pub fn dump_results(dcx: &RefactorCtxt, results: &AnalysisResult) {
     debug!("\n === summary ===");
 
-    let arena = SyncDroplessArena::default();
+    let arena = DroplessArena::default();
     let new_lcx = LabeledTyCtxt::new(&arena);
     let format_sig = |sig: VFnSig, assign: &IndexVec<Var, ConcretePerm>| {
         let mut func = |p: &Option<_>| p.as_ref().map(|&v| assign[v]);

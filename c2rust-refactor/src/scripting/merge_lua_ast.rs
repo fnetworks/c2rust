@@ -1,17 +1,19 @@
 use rlua::prelude::{LuaError, LuaResult, LuaString, LuaTable, LuaValue};
-use syntax::ast::{
-    BindingMode, Block, BorrowKind, Crate, Expr, ExprKind, Extern, FloatTy, FnDecl, FnSig, ImplItem, ImplItemKind,
-    Item, ItemKind, Lit, LitFloatType, LitKind, Local, Mod, Mutability::*, NodeId, Param, Pat, PatKind, Path, PathSegment,
-    Stmt, StmtKind, UintTy, IntTy, LitIntType, Ident, DUMMY_NODE_ID, BinOpKind, UnOp, BlockCheckMode,
-    Label, StrLit, StrStyle, TyKind, Ty, MutTy, Unsafety, FunctionRetTy, BareFnTy, UnsafeSource::*, Field,
-    AnonConst, Lifetime, AngleBracketedArgs, GenericArgs, GenericArg, VisibilityKind, InlineAsm,
-    AsmDialect, InlineAsmOutput, Constness, FnHeader, Generics, IsAsync, ImplPolarity, Defaultness,
-    UseTree, UseTreeKind, Arm
+use rustc_ast::ast::{
+    BindingMode, Block, BorrowKind, Crate, Expr, ExprKind, Extern, FloatTy, FnDecl, FnSig,
+    AssocItem, AssocItemKind, Item, ItemKind, Lit, LitFloatType, LitKind, Local, ModKind,
+    Mutability, NodeId, Param, Pat, PatKind, Path, PathSegment, Stmt, StmtKind, UintTy, IntTy,
+    LitIntType, DUMMY_NODE_ID, BinOpKind, UnOp, BlockCheckMode, Label, StrLit, StrStyle,
+    TyKind, Ty, MutTy, Unsafe, FnRetTy, BareFnTy, UnsafeSource::*, ExprField, AnonConst, Lifetime,
+    AngleBracketedArgs, GenericArgs, GenericArg, VisibilityKind, LlvmInlineAsm, LlvmAsmDialect,
+    LlvmInlineAsmOutput, Const, FnHeader, Generics, Async, ImplPolarity, Defaultness, UseTree,
+    UseTreeKind, Arm
 };
-use syntax::source_map::symbol::Symbol;
-use syntax::source_map::{DUMMY_SP, dummy_spanned, Span, SpanData};
-use syntax::ptr::P;
-use syntax::ThinVec;
+use rustc_span::symbol::Ident;
+use rustc_span::source_map::symbol::Symbol;
+use rustc_span::source_map::{DUMMY_SP, dummy_spanned, Span, SpanData};
+use rustc_ast::ptr::P;
+use rustc_data_structures::thin_vec::ThinVec;
 
 use std::rc::Rc;
 
@@ -47,7 +49,7 @@ fn dummy_ty() -> P<Ty> {
 fn dummy_fn_decl() -> P<FnDecl> {
     P(FnDecl {
         inputs: Vec::new(),
-        output: FunctionRetTy::Default(DUMMY_SP),
+        output: FnRetTy::Default(DUMMY_SP),
     })
 }
 
@@ -112,14 +114,14 @@ fn dummy_item() -> P<Item> {
     })
 }
 
-fn dummy_impl_item() -> ImplItem {
-    ImplItem {
+fn dummy_impl_item() -> AssocItem {
+    AssocItem {
         attrs: Vec::new(),
         defaultness: Defaultness::Default,
         generics: Generics::default(),
         id: DUMMY_NODE_ID,
         ident: Ident::from_str("placeholder"),
-        kind: ImplItemKind::TyAlias(dummy_ty()),
+        kind: AssocItemKind::TyAlias(dummy_ty()),
         span: DUMMY_SP,
         tokens: None,
         vis: dummy_spanned(VisibilityKind::Public),
@@ -275,8 +277,8 @@ impl MergeLuaAst for P<FnDecl> {
         }).transpose()?;
 
         self.output = match return_type {
-            Some(ty) => FunctionRetTy::Ty(ty),
-            None => FunctionRetTy::Default(DUMMY_SP),
+            Some(ty) => FnRetTy::Ty(ty),
+            None => FnRetTy::Default(DUMMY_SP),
         };
 
         let mut args = Vec::new();
@@ -324,10 +326,10 @@ impl MergeLuaAst for P<Pat> {
             "Ident" => {
                 let binding: LuaString = table.get("binding")?;
                 let binding = match binding.to_str()? {
-                    "ByRefImmutable" => BindingMode::ByRef(Immutable),
-                    "ByRefMutable" => BindingMode::ByRef(Mutable),
-                    "ByValueImmutable" => BindingMode::ByValue(Immutable),
-                    "ByValueMutable" => BindingMode::ByValue(Mutable),
+                    "ByRefImmutable" => BindingMode::ByRef(Mutability::Not),
+                    "ByRefMutable" => BindingMode::ByRef(Mutability::Mut),
+                    "ByValueImmutable" => BindingMode::ByValue(Mutability::Not),
+                    "ByValueMutable" => BindingMode::ByValue(Mutability::Mut),
                     e => unimplemented!("Unknown ident binding: {}", e),
                 };
                 let ident: LuaString = table.get("ident")?;
@@ -421,7 +423,7 @@ impl MergeLuaAst for Crate {
     }
 }
 
-impl MergeLuaAst for Mod {
+impl MergeLuaAst for ModKind {
     fn merge_lua_ast<'lua>(&mut self, table: LuaTable<'lua>) -> LuaResult<()> {
         let lua_items: LuaTable = table.get("items")?;
 
@@ -453,13 +455,13 @@ impl MergeLuaAst for P<Item> {
                 let mut block = dummy_block();
                 let mut decl = dummy_fn_decl();
                 let unsafety = match table.get::<_, LuaString>("unsafety")?.to_str()? {
-                    "Unsafe" => Unsafety::Unsafe,
-                    "Normal" => Unsafety::Normal,
+                    "Unsafe" => Unsafe::Yes,
+                    "Normal" => Unsafe::No,
                     e => unimplemented!("Unknown unsafety: {}", e),
                 };
                 let constness = match table.get::<_, bool>("is_const")? {
-                    true => dummy_spanned(Constness::Const),
-                    false => dummy_spanned(Constness::NotConst),
+                    true => dummy_spanned(Const::Yes),
+                    false => dummy_spanned(Const::No),
                 };
                 let ext = match table.get::<_, Option<LuaString>>("ext")? {
                     Some(ext) => match ext.to_str()? {
@@ -476,7 +478,7 @@ impl MergeLuaAst for P<Item> {
                 };
                 let fn_header = FnHeader {
                     ext,
-                    asyncness: dummy_spanned(IsAsync::NotAsync), // TODO
+                    asyncness: dummy_spanned(Async::No), // TODO
                     constness,
                     unsafety,
                 };
@@ -495,7 +497,7 @@ impl MergeLuaAst for P<Item> {
                 let lua_items: LuaTable = table.get("items")?;
                 let lua_ty = table.get("ty")?;
                 let mut items = Vec::new();
-                let unsafety = Unsafety::Normal; // TODO
+                let unsafety = Unsafe::No; // TODO
                 let polarity = ImplPolarity::Positive; // TODO
                 let defaultness = Defaultness::Default; // TODO
                 let generics = Generics::default(); // TODO
@@ -535,8 +537,8 @@ impl MergeLuaAst for P<Item> {
                 let lua_ty = table.get("ty")?;
                 let lua_expr = table.get("expr")?;
                 let mutability = match table.get::<_, LuaString>("mutability")?.to_str()? {
-                    "Immutable" => Immutable,
-                    "Mutable" => Mutable,
+                    "Immutable" => Mutability::Not,
+                    "Mutable" => Mutability::Mut,
                     e => panic!("Found unknown addrof mutability: {}", e),
                 };
                 let mut ty = dummy_ty();
@@ -837,8 +839,8 @@ impl MergeLuaAst for P<Expr> {
                 expr.merge_lua_ast(lua_expr)?;
 
                 let mutability = match table.get::<_, LuaString>("mutability")?.to_str()? {
-                    "Immutable" => Immutable,
-                    "Mutable" => Mutable,
+                    "Immutable" => Mutability::Not,
+                    "Mutable" => Mutability::Mut,
                     e => panic!("Found unknown addrof mutability: {}", e),
                 };
 
@@ -926,7 +928,7 @@ impl MergeLuaAst for P<Expr> {
 
                     expr.merge_lua_ast(lua_expr)?;
 
-                    fields.push(Field {
+                    fields.push(ExprField {
                         id,
                         ident,
                         expr,
@@ -956,13 +958,13 @@ impl MergeLuaAst for P<Expr> {
 
                 ExprKind::Repeat(expr, anon_const)
             },
-            "InlineAsm" => {
+            "LlvmInlineAsm" => {
                 let asm: LuaString = table.get("asm")?;
                 let asm = Symbol::intern(asm.to_str()?);
                 let dialect: LuaString = table.get("dialect")?;
                 let dialect = match dialect.to_str()? {
-                    "Att" => AsmDialect::Att,
-                    "Intel" => AsmDialect::Intel,
+                    "Att" => LlvmAsmDialect::Att,
+                    "Intel" => LlvmAsmDialect::Intel,
                     e => unimplemented!("Unknown ASM dialect: {}", e),
                 };
                 let lua_inputs: LuaTable = table.get("inputs")?;
@@ -980,7 +982,7 @@ impl MergeLuaAst for P<Expr> {
 
                     expr.merge_lua_ast(lua_expr)?;
 
-                    let output = InlineAsmOutput {
+                    let output = LlvmInlineAsmOutput {
                         constraint: Symbol::intern(lua_constraint.to_str()?),
                         expr,
                         is_indirect: lua_output.get("is_indirect")?,
@@ -1007,7 +1009,7 @@ impl MergeLuaAst for P<Expr> {
                     clobbers.push(symbol);
                 }
 
-                ExprKind::InlineAsm(P(InlineAsm {
+                ExprKind::LlvmInlineAsm(P(LlvmInlineAsm {
                     asm,
                     asm_str_style: StrStyle::Cooked, // TODO: Raw strings
                     outputs,
@@ -1105,7 +1107,7 @@ impl MergeLuaAst for P<Expr> {
     }
 }
 
-impl MergeLuaAst for ImplItem {
+impl MergeLuaAst for AssocItem {
     fn merge_lua_ast<'lua>(&mut self, table: LuaTable<'lua>) -> LuaResult<()> {
         self.ident.name = Symbol::intern(&table.get::<_, LuaString>("ident")?.to_str()?);
         self.span = get_span_or_default(&table, "span")?;
@@ -1113,7 +1115,7 @@ impl MergeLuaAst for ImplItem {
 
         // TODO: Allow for inplace kind mutations
         match &mut self.kind {
-            ImplItemKind::Method(sig, block) => {
+            AssocItemKind::Method(sig, block) => {
                 let lua_decl: LuaTable = table.get("decl")?;
                 let lua_block: LuaTable = table.get("block")?;
 
@@ -1148,8 +1150,8 @@ impl MergeLuaAst for P<Ty> {
             },
             "Ptr" | "Rptr" => {
                 let mutbl = match table.get::<_, LuaString>("mutbl")?.to_str()? {
-                    "Immutable" => Immutable,
-                    "Mutable" => Mutable,
+                    "Immutable" => Mutability::Not,
+                    "Mutable" => Mutability::Mut,
                     e => panic!("Found unknown ptr mutability: {}", e),
                 };
                 let lua_ty = table.get("ty")?;
@@ -1176,8 +1178,8 @@ impl MergeLuaAst for P<Ty> {
                 let lua_decl = table.get("decl")?;
                 let mut decl = dummy_fn_decl();
                 let unsafety = match table.get::<_, LuaString>("unsafety")?.to_str()? {
-                    "Unsafe" => Unsafety::Unsafe,
-                    "Normal" => Unsafety::Normal,
+                    "Unsafe" => Unsafe::Yes,
+                    "Normal" => Unsafe::No,
                     e => panic!("Found unknown unsafety: {}", e),
                 };
                 let ext = match table.get::<_, Option<LuaString>>("ext")? {

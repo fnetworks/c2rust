@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::collections::VecDeque;
 
 use log::Level;
-use rustc::hir::def_id::DefId;
+use rustc_hir::def_id::DefId;
 
 use super::constraint::{ConstraintSet, Perm};
 use super::context::Ctxt;

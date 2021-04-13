@@ -9,17 +9,18 @@ use std::sync::Arc;
 use rlua::prelude::{LuaContext, LuaError, LuaFunction, LuaResult, LuaString, LuaTable, LuaValue};
 use rlua::{AnyUserData, FromLua, Lua, UserData, UserDataMethods};
 use rustc_interface::interface;
-use syntax::ThinVec;
-use syntax::ast::{
+use rustc_data_structures::thin_vec::ThinVec;
+use rustc_ast::ast::{
     self, DUMMY_NODE_ID, Expr, ExprKind, Lit, LitIntType, LitKind, MacDelimiter,
     NodeId, PathSegment, Ty,
 };
-use syntax::mut_visit::MutVisitor;
-use syntax::token::{Lit as TokenLit, LitKind as TokenLitKind, Nonterminal, Token, TokenKind};
-use syntax::ptr::P;
-use syntax::symbol::Symbol;
-use syntax::tokenstream::TokenTree;
-use syntax_pos::DUMMY_SP;
+use rustc_ast::mut_visit::MutVisitor;
+use rustc_ast::token::{Lit as TokenLit, LitKind as TokenLitKind, Nonterminal, Token, TokenKind};
+use rustc_ast::ptr::P;
+use rustc_span::symbol::Symbol;
+use rustc_ast::tokenstream::TokenTree;
+use rustc_span::DUMMY_SP;
+use rustc_span::symbol;
 
 use c2rust_ast_builder::mk;
 use crate::ast_manip::MutVisit;
@@ -562,7 +563,7 @@ impl<'a, 'tcx> TransformCtxt<'a, 'tcx> {
         &self,
         lua_ctx: LuaContext<'lua>,
         lua_tree: LuaTable<'lua>,
-        ident: Option<ast::Ident>
+        ident: Option<symbol::Ident>
     ) -> LuaResult<ast::UseTree> {
         let mut trees: Vec<ast::UseTree> = vec![];
         for pair in lua_tree.pairs::<LuaValue, LuaValue>() {
@@ -586,7 +587,7 @@ impl<'a, 'tcx> TransformCtxt<'a, 'tcx> {
                         trees.push(self.create_use_tree(
                             lua_ctx,
                             items,
-                            Some(ast::Ident::from_str(s.to_str()?)),
+                            Some(symbol::Ident::from_str(s.to_str()?)),
                         )?);
                     }
 
@@ -612,7 +613,7 @@ impl<'a, 'tcx> TransformCtxt<'a, 'tcx> {
             }
             return Ok(use_tree);
         }
-        let prefix = ast::Path::from_ident(ident.unwrap_or_else(|| ast::Ident::from_str("")));
+        let prefix = ast::Path::from_ident(ident.unwrap_or_else(|| symbol::Ident::from_str("")));
         Ok(mk().use_tree(prefix, ast::UseTreeKind::Nested(
             trees.into_iter().map(|u| (u, DUMMY_NODE_ID)).collect()
         )))
@@ -876,7 +877,7 @@ impl<'a, 'tcx> UserData for TransformCtxt<'a, 'tcx> {
         });
 
         methods.add_method("get_field_expr_hirid", |_lua_ctx, this, expr: LuaAstNode<P<Expr>>| {
-            use rustc::ty::TyKind;
+            use rustc_middle::ty::TyKind;
 
             let expr = expr.borrow();
 

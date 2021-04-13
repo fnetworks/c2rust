@@ -23,7 +23,7 @@ impl<'c> Translation<'c> {
     pub fn enum_for_i64(&self, enum_type_id: CTypeId, value: i64) -> P<Expr> {
         let def_id = match self.ast_context.resolve_type(enum_type_id).kind {
             CTypeKind::Enum(def_id) => def_id,
-            _ => panic!("{:?} does not point to an `enum` type"),
+            _ => panic!("{:?} does not point to an `enum` type", enum_type_id),
         };
 
         let (variants, underlying_type_id) = match self.ast_context[def_id].kind {
@@ -32,7 +32,7 @@ impl<'c> Translation<'c> {
                 integral_type,
                 ..
             } => (variants, integral_type),
-            _ => panic!("{:?} does not point to an `enum` declaration"),
+            _ => panic!("{:?} does not point to an `enum` declaration", def_id),
         };
 
         for &variant_id in variants {
@@ -149,9 +149,9 @@ impl<'c> Translation<'c> {
                 let array_ty = mk().array_ty(u8_ty, width_lit);
                 let source_ty = mk().ref_ty(array_ty);
                 let mutbl = if ty.qualifiers.is_const {
-                    Mutability::Immutable
+                    Mutability::Not
                 } else {
-                    Mutability::Mutable
+                    Mutability::Mut
                 };
                 let target_ty = mk().set_mutbl(mutbl).ref_ty(self.convert_type(ty.ctype)?);
                 let byte_literal = mk().lit_expr(val);

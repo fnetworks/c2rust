@@ -133,7 +133,7 @@ impl<'c> Translation<'c> {
                             .borrow_mut()
                             .convert_function(&self.ast_context, opt_ret, params, is_variadic)?;
 
-                        let m = if p.qualifiers.is_const { Mutability::Immutable } else { Mutability::Mutable };
+                        let m = if p.qualifiers.is_const { Mutability::Not } else { Mutability::Mut };
                         Some(mk().set_mutbl(m).ptr_ty(fn_ty))
                     } else { None }
                 } else { None }

@@ -1,6 +1,6 @@
 use std::cell::Cell;
-use syntax::ast::{Mac, NodeId, DUMMY_NODE_ID};
-use syntax::mut_visit::{self, MutVisitor};
+use rustc_ast::ast::{MacCall, NodeId, DUMMY_NODE_ID};
+use rustc_ast::mut_visit::{self, MutVisitor};
 
 use crate::ast_manip::MutVisit;
 
@@ -28,8 +28,8 @@ impl<'a> MutVisitor for NumberNodes<'a> {
         *i = self.counter.next()
     }
 
-    fn visit_mac(&mut self, mac: &mut Mac) {
-        mut_visit::noop_visit_mac(mac, self)
+    fn visit_mac_call(&mut self, mac: &mut MacCall) {
+        mut_visit::noop_visit_mac_call(mac, self)
     }
 }
 
@@ -50,8 +50,8 @@ impl MutVisitor for ResetNodeIds {
         *i = DUMMY_NODE_ID;
     }
 
-    fn visit_mac(&mut self, mac: &mut Mac) {
-        mut_visit::noop_visit_mac(mac, self)
+    fn visit_mac_call(&mut self, mac: &mut MacCall) {
+        mut_visit::noop_visit_mac_call(mac, self)
     }
 }
 

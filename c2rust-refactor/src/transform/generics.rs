@@ -1,8 +1,7 @@
 use std::collections::HashSet;
-use syntax::ast::*;
-use syntax::ptr::P;
-use syntax::symbol::Symbol;
-use smallvec::smallvec;
+use rustc_ast::ast::*;
+use rustc_ast::ptr::P;
+use rustc_span::symbol::Symbol;
 
 use crate::ast_manip::{FlatMapNodes, MutVisitNodes};
 use crate::command::{CommandState, Registry};
